@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DropSecure — Encrypted P2P File Transfer</title>
+  <meta name="description" content="Transfer files directly between browsers with military-grade end-to-end encryption. No servers. No limits. No compromises.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="landing.css">
+</head>
+<body>
+
+  <!-- Animated background mesh -->
+  <div class="bg-mesh">
+    <div class="mesh-orb orb-1"></div>
+    <div class="mesh-orb orb-2"></div>
+    <div class="mesh-orb orb-3"></div>
+  </div>
+
+  <!-- Floating particles -->
+  <div class="particles" id="particles"></div>
+
+  <!-- ═══════════════════════ NAVBAR ═══════════════════════ -->
+  <nav class="navbar" id="navbar">
+    <div class="nav-container">
+      <a href="index.html" class="nav-logo">
+        <span class="logo-bolt">⚡</span>
+        <span class="logo-text">Drop<span class="logo-accent">Secure</span></span>
+      </a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#security">Security</a>
+        <a href="#how-it-works">How It Works</a>
+        <a href="#pricing">Pricing</a>
+      </div>
+      <div class="nav-actions">
+        <a href="login.html" class="btn-ghost">Log In</a>
+        <a href="signup.html" class="btn-cta">Get Started Free</a>
+      </div>
+      <button class="hamburger" id="hamburger" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+    <!-- Mobile menu -->
+    <div class="mobile-menu" id="mobile-menu">
+      <a href="#features">Features</a>
+      <a href="#security">Security</a>
+      <a href="#how-it-works">How It Works</a>
+      <a href="#pricing">Pricing</a>
+      <a href="login.html" class="btn-ghost w-full">Log In</a>
+      <a href="signup.html" class="btn-cta w-full">Get Started Free</a>
+    </div>
+  </nav>
+
+  <!-- ═══════════════════════ HERO ═══════════════════════════ -->
+  <section class="hero">
+    <div class="hero-container">
+      <div class="hero-content">
+        <div class="hero-badge" data-reveal>
+          <span class="badge-dot"></span>
+          <span>256-bit AES-GCM + ECDH Encryption</span>
+        </div>
+
+        <h1 class="hero-title" data-reveal>
+          Transfer Files <br>
+          <span class="gradient-text">Without Limits</span><br>
+          <span class="hero-sub-word">Or Compromises</span>
+        </h1>
+
+        <p class="hero-desc" data-reveal>
+          Military-grade end-to-end encrypted P2P file transfer — directly between browsers.
+          Your files never touch our servers. Pause, resume, cancel at any time.
+        </p>
+
+        <div class="hero-actions" data-reveal>
+          <a href="signup.html" class="btn-primary-lg">
+            <span>Start Transferring Free</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </a>
+          <a href="#how-it-works" class="btn-outline-lg">Watch How It Works</a>
+        </div>
+
+        <div class="hero-stats" data-reveal>
+          <div class="stat">
+            <span class="stat-val">0</span>
+            <span class="stat-label">Bytes stored on servers</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat">
+            <span class="stat-val">256-bit</span>
+            <span class="stat-label">AES-GCM encryption</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat">
+            <span class="stat-val">∞</span>
+            <span class="stat-label">File size limit</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-visual" data-reveal>
+        <div class="hero-img-wrap">
+          <img src="hero.png" alt="P2P encrypted file transfer visualization" class="hero-img">
+          <div class="hero-img-glow"></div>
+        </div>
+        <!-- Live demo overlay -->
+        <div class="demo-card demo-card-sender">
+          <div class="demo-card-icon">📤</div>
+          <div>
+            <div class="demo-card-title">Sending</div>
+            <div class="demo-card-file">presentation.pptx · 84 MB</div>
+            <div class="demo-progress-bar"><div class="demo-bar" style="width:72%"></div></div>
+            <div class="demo-card-speed">⚡ 94.2 MB/s</div>
+          </div>
+        </div>
+        <div class="demo-card demo-card-receiver">
+          <div class="demo-card-icon">🔐</div>
+          <div>
+            <div class="demo-card-title">Receiving (Encrypted)</div>
+            <div class="demo-card-file">ECDH + AES-256-GCM</div>
+            <div class="demo-progress-bar"><div class="demo-bar" style="width:72%"></div></div>
+            <div class="demo-card-speed">🟢 Connected P2P</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scroll indicator -->
+    <div class="scroll-hint">
+      <div class="scroll-line"></div>
+      <span>Scroll to explore</span>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ TRUST BAR ═══════════════════════ -->
+  <section class="trust-bar">
+    <div class="container">
+      <p class="trust-label">Powered by open standards</p>
+      <div class="trust-logos">
+        <span class="trust-item">🔒 WebRTC DTLS</span>
+        <span class="trust-item">🔑 ECDH P-256</span>
+        <span class="trust-item">🛡 AES-256-GCM</span>
+        <span class="trust-item">🌐 Web Crypto API</span>
+        <span class="trust-item">⚙ Node.js</span>
+        <span class="trust-item">🗄 MongoDB Atlas</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ FEATURES ═══════════════════════ -->
+  <section class="features" id="features">
+    <div class="container">
+      <div class="section-header" data-reveal>
+        <span class="section-tag">Features</span>
+        <h2>Everything you need.<br>Nothing you don't.</h2>
+        <p>Built for people who need fast, reliable, and private file transfers.</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card" data-reveal>
+          <div class="feature-icon" style="background: rgba(99,102,241,0.15); color: #818cf8;">🔒</div>
+          <h3>End-to-End Encrypted</h3>
+          <p>ECDH key exchange + AES-256-GCM on every single chunk. Two layers of encryption — application layer on top of WebRTC's built-in DTLS.</p>
+        </div>
+        <div class="feature-card" data-reveal>
+          <div class="feature-icon" style="background: rgba(16,185,129,0.15); color: #34d399;">⚡</div>
+          <h3>Blazing Fast P2P</h3>
+          <p>Files go directly browser-to-browser at your full network speed. No upload bottleneck, no server relay. Just raw WebRTC throughput.</p>
+        </div>
+        <div class="feature-card" data-reveal>
+          <div class="feature-icon" style="background: rgba(245,158,11,0.15); color: #fbbf24;">⏸</div>
+          <h3>Pause & Resume</h3>
+          <p>Pause a multi-gigabyte transfer mid-way and resume from the exact same byte position — no starting over.</p>
+        </div>
+        <div class="feature-card" data-reveal>
+          <div class="feature-icon" style="background: rgba(239,68,68,0.15); color: #f87171;">↔️</div>
+          <h3>Full Duplex</h3>
+          <p>Both peers can send and receive simultaneously on independent WebRTC DataChannels. True bidirectional transfer.</p>
+        </div>
+        <div class="feature-card" data-reveal>
+          <div class="feature-icon" style="background: rgba(168,85,247,0.15); color: #c084fc;">📊</div>
+          <h3>Real-Time Analytics</h3>
+          <p>Live TX/RX speed, RTT ping, progress bar, time remaining, chunk size, and a live Chart.js graph — all updating every second.</p>
+        </div>
+        <div class="feature-card" data-reveal>
+          <div class="feature-icon" style="background: rgba(6,182,212,0.15); color: #22d3ee;">∞</div>
+          <h3>No Size Limits</h3>
+          <p>Transfer files of any size. From 1 KB text files to 100 GB video archives — the only limit is your disk space.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ SECURITY ═══════════════════════ -->
+  <section class="security-section" id="security">
+    <div class="container">
+      <div class="security-grid">
+        <div class="security-content" data-reveal>
+          <span class="section-tag">Security</span>
+          <h2>Military-grade encryption,<br>explained simply.</h2>
+          <p class="security-desc">
+            Every file transfer uses two independent layers of encryption so that even if one is compromised, your data stays safe.
+          </p>
+
+          <div class="crypto-steps">
+            <div class="crypto-step">
+              <div class="step-number">01</div>
+              <div>
+                <strong>ECDH Key Exchange</strong>
+                <p>Both browsers generate ephemeral P-256 key pairs. Public keys are exchanged. Neither party ever sends their private key.</p>
+              </div>
+            </div>
+            <div class="crypto-step">
+              <div class="step-number">02</div>
+              <div>
+                <strong>Shared Secret via HKDF</strong>
+                <p>The ECDH shared secret is processed through HKDF-SHA-256 to derive a 256-bit AES-GCM encryption key. Unique per session.</p>
+              </div>
+            </div>
+            <div class="crypto-step">
+              <div class="step-number">03</div>
+              <div>
+                <strong>AES-256-GCM Encryption</strong>
+                <p>Every chunk is encrypted with a random 12-byte IV and authenticated with a sequence number to prevent replay attacks.</p>
+              </div>
+            </div>
+            <div class="crypto-step">
+              <div class="step-number">04</div>
+              <div>
+                <strong>DTLS (WebRTC Layer)</strong>
+                <p>WebRTC DataChannels enforce DTLS 1.2 automatically — a second encryption layer at the transport level.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="security-visual" data-reveal>
+          <div class="lock-animation">
+            <div class="lock-ring ring-1"></div>
+            <div class="lock-ring ring-2"></div>
+            <div class="lock-ring ring-3"></div>
+            <div class="lock-icon">🔐</div>
+            <div class="lock-label">AES-256-GCM</div>
+          </div>
+          <div class="cipher-lines" id="cipher-lines"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ HOW IT WORKS ════════════════════ -->
+  <section class="how-it-works" id="how-it-works">
+    <div class="container">
+      <div class="section-header" data-reveal>
+        <span class="section-tag">Process</span>
+        <h2>Up and running in 30 seconds.</h2>
+        <p>No software to install. Works in any modern browser.</p>
+      </div>
+
+      <div class="steps">
+        <div class="step" data-reveal>
+          <div class="step-icon-wrap">
+            <div class="step-icon">1</div>
+          </div>
+          <div class="step-connector"></div>
+          <h3>Create a Room</h3>
+          <p>Click "Create Room" to generate a unique 5-digit room code. Share it with your recipient.</p>
+        </div>
+        <div class="step" data-reveal>
+          <div class="step-icon-wrap">
+            <div class="step-icon">2</div>
+          </div>
+          <div class="step-connector"></div>
+          <h3>Peer Connects</h3>
+          <p>Recipient enters the room code. WebRTC negotiates a direct P2P connection. ECDH keys are exchanged.</p>
+        </div>
+        <div class="step" data-reveal>
+          <div class="step-icon-wrap">
+            <div class="step-icon">3</div>
+          </div>
+          <div class="step-connector"></div>
+          <h3>Transfer & Done</h3>
+          <p>Select a file, click Send. Encrypted chunks stream directly to the receiver. No server middleman.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ PRICING ══════════════════════════ -->
+  <section class="pricing" id="pricing">
+    <div class="container">
+      <div class="section-header" data-reveal>
+        <span class="section-tag">Pricing</span>
+        <h2>Free forever.<br>Seriously.</h2>
+        <p>DropSecure is 100% free and open-source. No hidden fees.</p>
+      </div>
+
+      <div class="pricing-card" data-reveal>
+        <div class="pricing-badge">Free Forever</div>
+        <div class="pricing-price">
+          <span class="price-dollar">$</span>
+          <span class="price-num">0</span>
+          <span class="price-period">/ month</span>
+        </div>
+        <ul class="pricing-features">
+          <li><span class="check">✓</span> Unlimited file size</li>
+          <li><span class="check">✓</span> Unlimited transfers</li>
+          <li><span class="check">✓</span> ECDH + AES-256-GCM encryption</li>
+          <li><span class="check">✓</span> Pause / Resume support</li>
+          <li><span class="check">✓</span> Full-duplex transfers</li>
+          <li><span class="check">✓</span> Real-time speed analytics</li>
+          <li><span class="check">✓</span> No data stored on servers</li>
+        </ul>
+        <a href="signup.html" class="btn-primary-lg w-full" style="justify-content: center;">Get Started Free →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ CTA BANNER ══════════════════════ -->
+  <section class="cta-banner">
+    <div class="container">
+      <div class="cta-content" data-reveal>
+        <h2>Ready to transfer without compromise?</h2>
+        <p>Join thousands of users already using DropSecure for private, fast file transfers.</p>
+        <div class="cta-actions">
+          <a href="signup.html" class="btn-primary-lg">Create Free Account</a>
+          <a href="app.html" class="btn-ghost-lg">Try Without Account</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ FOOTER ══════════════════════════ -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a href="index.html" class="nav-logo">
+            <span class="logo-bolt">⚡</span>
+            <span class="logo-text">Drop<span class="logo-accent">Secure</span></span>
+          </a>
+          <p>Direct browser-to-browser file transfer with zero server storage and military-grade encryption.</p>
+        </div>
+        <div class="footer-col">
+          <h4>Product</h4>
+          <a href="#features">Features</a>
+          <a href="#security">Security</a>
+          <a href="#how-it-works">How It Works</a>
+          <a href="app.html">Open App</a>
+        </div>
+        <div class="footer-col">
+          <h4>Account</h4>
+          <a href="login.html">Log In</a>
+          <a href="signup.html">Sign Up</a>
+        </div>
+        <div class="footer-col">
+          <h4>Tech Stack</h4>
+          <a href="#">WebRTC</a>
+          <a href="#">ECDH P-256</a>
+          <a href="#">AES-256-GCM</a>
+          <a href="#">Node.js + MongoDB</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>© 2024 DropSecure. Files never touch our servers.</p>
+        <p>Built by Bhavesh Bhardwaj · <a href="https://github.com/BhaveshBhardwaj" target="_blank">GitHub</a></p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // ── Navbar scroll behavior ──────────────────────────────────
+    window.addEventListener('scroll', () => {
+      document.getElementById('navbar').classList.toggle('scrolled', window.scrollY > 40);
+    });
+
+    // ── Mobile hamburger ────────────────────────────────────────
+    document.getElementById('hamburger').addEventListener('click', () => {
+      document.getElementById('mobile-menu').classList.toggle('open');
+    });
+
+    // ── Scroll-reveal with IntersectionObserver ─────────────────
+    const reveals = document.querySelectorAll('[data-reveal]');
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('revealed');
+          observer.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.12 });
+    reveals.forEach(el => observer.observe(el));
+
+    // ── Floating particles ──────────────────────────────────────
+    const particleContainer = document.getElementById('particles');
+    for (let i = 0; i < 30; i++) {
+      const p = document.createElement('div');
+      p.className = 'particle';
+      p.style.cssText = `
+        left: ${Math.random() * 100}%;
+        top: ${Math.random() * 100}%;
+        width: ${2 + Math.random() * 3}px;
+        height: ${2 + Math.random() * 3}px;
+        animation-delay: ${Math.random() * 8}s;
+        animation-duration: ${6 + Math.random() * 10}s;
+        opacity: ${0.2 + Math.random() * 0.4};
+      `;
+      particleContainer.appendChild(p);
+    }
+
+    // ── Cipher lines animation ───────────────────────────────────
+    const cipherContainer = document.getElementById('cipher-lines');
+    const chars = 'ABCDEF0123456789';
+    for (let i = 0; i < 8; i++) {
+      const line = document.createElement('div');
+      line.className = 'cipher-line';
+      line.style.animationDelay = `${i * 0.3}s`;
+      let text = '';
+      for (let j = 0; j < 24; j++) text += chars[Math.floor(Math.random() * chars.length)];
+      line.textContent = text;
+      cipherContainer.appendChild(line);
+    }
+    // Update cipher text every 150ms
+    setInterval(() => {
+      document.querySelectorAll('.cipher-line').forEach(line => {
+        let text = '';
+        for (let j = 0; j < 24; j++) text += chars[Math.floor(Math.random() * chars.length)];
+        line.textContent = text;
+      });
+    }, 150);
+
+    // ── Demo progress bar animation ──────────────────────────────
+    let pct = 72;
+    let dir = 1;
+    setInterval(() => {
+      pct += dir * (Math.random() * 0.8);
+      if (pct >= 100) { pct = 100; dir = -1; setTimeout(() => { pct = 5; dir = 1; }, 1000); }
+      document.querySelectorAll('.demo-bar').forEach(b => b.style.width = pct + '%');
+    }, 50);
+  </script>
+</body>
+</html>

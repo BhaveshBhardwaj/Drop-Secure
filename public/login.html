@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Log In — DropSecure</title>
+  <link rel="stylesheet" href="auth.css">
+</head>
+<body>
+  <div class="bg-mesh">
+    <div class="mesh-orb orb-1"></div>
+    <div class="mesh-orb orb-2"></div>
+  </div>
+  <div class="bg-grid"></div>
+
+  <div class="auth-wrapper">
+    <a href="index.html" class="auth-logo">
+      <span class="logo-bolt">⚡</span>
+      <span>Drop<span class="logo-accent">Secure</span></span>
+    </a>
+
+    <div class="auth-card">
+      <h1>Welcome back</h1>
+      <p class="subtitle">Log in to your DropSecure account</p>
+
+      <div class="alert-msg" id="alert-msg"></div>
+
+      <form id="login-form" novalidate>
+        <div class="form-group">
+          <label for="email">Email address</label>
+          <div class="input-wrap">
+            <span class="input-icon">✉️</span>
+            <input type="email" id="email" name="email" placeholder="you@example.com" autocomplete="email" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password</label>
+          <div class="input-wrap">
+            <span class="input-icon">🔑</span>
+            <input type="password" id="password" name="password" placeholder="Your password" autocomplete="current-password" required>
+          </div>
+        </div>
+
+        <div class="auth-row">
+          <label>
+            <input type="checkbox" id="remember" name="remember">
+            Remember me
+          </label>
+          <a href="#">Forgot password?</a>
+        </div>
+
+        <button type="submit" class="btn-auth" id="submit-btn">
+          <div class="btn-spinner" id="spinner"></div>
+          <span class="btn-text" id="btn-text">Log In →</span>
+        </button>
+      </form>
+
+      <div class="auth-switch">
+        Don't have an account? <a href="signup.html">Sign up free</a>
+      </div>
+    </div>
+
+    <div class="auth-secure-badge">
+      🔒 256-bit AES-GCM · ECDH · DTLS · JWT
+    </div>
+  </div>
+
+  <script>
+    // If already logged in, redirect to app
+    const token = localStorage.getItem('ds_token');
+    if (token) {
+      fetch('/api/auth/me', { headers: { 'Authorization': 'Bearer ' + token } })
+        .then(r => r.ok ? (window.location.href = 'app.html' + window.location.search) : null)
+        .catch(() => {});
+    }
+
+    const form = document.getElementById('login-form');
+    const alertMsg = document.getElementById('alert-msg');
+    const submitBtn = document.getElementById('submit-btn');
+    const btnText = document.getElementById('btn-text');
+    const spinner = document.getElementById('spinner');
+
+    function showAlert(msg, type = 'error') {
+      alertMsg.textContent = type === 'error' ? '⚠ ' + msg : '✓ ' + msg;
+      alertMsg.className = 'alert-msg ' + type;
+    }
+
+    function setLoading(loading) {
+      submitBtn.disabled = loading;
+      submitBtn.classList.toggle('loading', loading);
+      spinner.style.display = loading ? 'block' : 'none';
+      btnText.textContent = loading ? '' : 'Log In →';
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+
+      if (!email || !password) { showAlert('Please fill in all fields.'); return; }
+
+      setLoading(true);
+      alertMsg.className = 'alert-msg'; // hide
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          showAlert(data.error || 'Login failed. Please try again.');
+          setLoading(false);
+          return;
+        }
+
+        // Save JWT + user info
+        localStorage.setItem('ds_token', data.token);
+        localStorage.setItem('ds_user', JSON.stringify(data.user));
+
+        showAlert('Login successful! Redirecting...', 'success');
+        const params = window.location.search;
+        setTimeout(() => { window.location.href = 'app.html' + params; }, 800);
+
+      } catch (err) {
+        showAlert('Network error. Is the server running?');
+        setLoading(false);
+      }
+    });
+  </script>
+</body>
+</html>

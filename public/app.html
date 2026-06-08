@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transfer — DropSecure</title>
+  <meta name="description" content="Encrypted P2P file transfer app">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="bg-glow"></div>
+
+  <header>
+    <div class="header-container">
+      <div class="logo">
+        <a href="index.html" style="display:flex;align-items:center;gap:0.6rem;text-decoration:none;color:inherit;">
+          <span class="logo-icon">⚡</span>
+          <h1>Drop<span style="color:#6366f1;">Secure</span></h1>
+        </a>
+      </div>
+      <div style="display:flex;align-items:center;gap:1rem;">
+        <!-- Encryption status badge -->
+        <div id="e2e-badge" class="e2e-badge e2e-pending" title="End-to-end encryption status">
+          <span id="e2e-icon">🔓</span>
+          <span id="e2e-label">E2E Pending</span>
+        </div>
+        <!-- Connection status -->
+        <div class="status-indicator">
+          <span class="pulse-dot idle" id="connection-status-dot"></span>
+          <span id="connection-status-text">Disconnected</span>
+        </div>
+        <!-- User info -->
+        <div class="user-pill" id="user-pill" style="display:none;">
+          <span class="user-avatar" id="user-avatar">B</span>
+          <span id="user-name-display">User</span>
+          <button class="btn-logout" id="btn-logout" title="Log out">↩</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="dashboard-grid">
+    <!-- LEFT COLUMN: Connection & Send -->
+    <div class="column">
+      <!-- Connection Setup Card -->
+      <section class="card glass shadow-box">
+        <div class="card-header">
+          <h2>1. Connection Setup</h2>
+          <span class="badge badge-sender">WebRTC</span>
+        </div>
+
+        <div class="card-body">
+          <!-- Room setup -->
+          <div id="room-setup-section">
+            <p class="description-text">Create a room to share files, or enter a room ID shared with you.</p>
+            <div class="action-buttons" style="margin-bottom: 1.5rem;">
+              <button type="button" class="btn btn-primary" id="btn-create-room">Create a Room</button>
+            </div>
+
+            <div class="or-separator">OR</div>
+
+            <div class="form-group" style="margin-top: 1rem;">
+              <label for="room-id-input">Enter Room ID</label>
+              <div style="display: flex; gap: 0.5rem;">
+                <input type="text" id="room-id-input" placeholder="e.g. 52891" style="flex: 1;">
+                <button type="button" class="btn btn-success" id="btn-join-room" style="flex: 0 0 100px; padding: 0;">Join</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Connection established -->
+          <div id="transfer-section" class="hidden">
+            <div class="info-banner">
+              <p>Connected! Room ID: <strong id="current-room-id" class="highlight">-----</strong></p>
+              <p class="text-small" id="peer-role-text">Waiting for connection...</p>
+            </div>
+            <button type="button" class="btn btn-danger" id="btn-disconnect" style="width: 100%;">Disconnect</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Transmission Settings Card -->
+      <section class="card glass shadow-box margin-top-card" id="settings-card">
+        <div class="card-header">
+          <h2>2. Transmission Settings</h2>
+          <span class="badge" style="background: rgba(255,255,255,0.05); color: #fff;">Config</span>
+        </div>
+
+        <div class="card-body">
+          <div class="form-group">
+            <label for="chunk-size-select">Dynamic Chunk Size:</label>
+            <select id="chunk-size-select" style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.25); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-color); font-family: var(--font-sans); font-size: 0.95rem;">
+              <option value="4096">4 KB</option>
+              <option value="8192">8 KB</option>
+              <option value="16384" selected>16 KB (Standard / Balanced)</option>
+              <option value="32768">32 KB</option>
+              <option value="64512">64 KB</option>
+              <option value="131072">128 KB</option>
+              <option value="262144">256 KB (Max throughput)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="speedLimit">Upload Speed Limit: <span id="speed-limit-val" class="highlight">Unlimited</span></label>
+            <div class="slider-container">
+              <input type="range" id="speedLimit" min="0" max="100" value="0" step="1" disabled>
+              <span class="slider-label"><span>0 (Max)</span><span>100 MB/s</span></span>
+            </div>
+          </div>
+
+          <div style="background: rgba(99, 102, 241, 0.05); border: 1px solid rgba(99, 102, 241, 0.15); border-radius: 8px; padding: 0.75rem; font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;" id="protocol-analysis">
+            <strong>Optimal Config Tip:</strong> Standard 16 KB chunk size is recommended for most network conditions.
+          </div>
+        </div>
+      </section>
+
+      <!-- Send File Card -->
+      <section class="card glass shadow-box margin-top-card" id="send-card">
+        <div class="card-header">
+          <h2>3. Send File (Upload)</h2>
+          <span class="badge badge-sender">Sender</span>
+        </div>
+
+        <div class="card-body">
+          <div class="form-group">
+            <label for="file-input">Select a file to send:</label>
+            <input type="file" id="file-input" class="file-input-btn" disabled>
+          </div>
+
+          <div class="action-buttons">
+            <button type="button" class="btn btn-primary" id="btn-start-send" disabled>Send File</button>
+          </div>
+
+          <!-- Upload Progress & Stats -->
+          <div class="stats-panel hidden" id="upload-stats-panel">
+            <h3>Upload Progress</h3>
+            <div class="metrics-grid">
+              <div class="metric">
+                <span class="metric-label">Upload Speed</span>
+                <span class="metric-value" id="tx-speed">0 MB/s</span>
+              </div>
+              <div class="metric">
+                <span class="metric-label">Avg RTT (Ping)</span>
+                <span class="metric-value" id="tx-rtt">N/A</span>
+              </div>
+              <div class="metric">
+                <span class="metric-label">Sent</span>
+                <span class="metric-value" id="tx-sent">0 MB</span>
+              </div>
+              <div class="metric">
+                <span class="metric-label">Time Remaining</span>
+                <span class="metric-value" id="tx-time">--:--</span>
+              </div>
+              <div class="metric" style="grid-column: span 2;">
+                <span class="metric-label">Chunk Size</span>
+                <span class="metric-value" id="tx-chunk-size">16 KB</span>
+              </div>
+            </div>
+
+            <div class="progress-container">
+              <div class="progress-bar-wrap">
+                <div class="progress-bar" id="tx-progress-bar" style="width: 0%"></div>
+              </div>
+              <div class="progress-details">
+                <span>Progress: <strong id="tx-progress-percent">0%</strong></span>
+                <span id="tx-status-text">Ready</span>
+              </div>
+              <div class="transfer-controls" style="margin-top: 1rem; display: flex; gap: 0.6rem;">
+                <button type="button" class="btn btn-warning" id="btn-pause-send" style="flex: 1;">⏸ Pause</button>
+                <button type="button" class="btn btn-success" id="btn-resume-send" style="flex: 1; display: none;">▶ Resume</button>
+                <button type="button" class="btn btn-danger" id="btn-cancel-send" style="flex: 0 0 auto;">✕ Cancel</button>
+              </div>
+              <div id="tx-stall-warning" class="stall-warning hidden">⚠ Transfer stalled — no data flowing for 8 seconds</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- RIGHT COLUMN: Receive & Terminal -->
+    <div class="column">
+      <!-- Receive File Card -->
+      <section class="card glass shadow-box" id="receive-card">
+        <div class="card-header">
+          <h2>4. Receive File (Download)</h2>
+          <span class="badge badge-receiver">Receiver</span>
+        </div>
+
+        <div class="card-body">
+          <!-- Incoming file alert -->
+          <div id="incoming-file-alert" class="hidden alert-box">
+            <div class="alert-icon">📥</div>
+            <div class="alert-content">
+              <h4>Incoming File Request</h4>
+              <p>Filename: <strong id="incoming-filename" class="highlight">file.txt</strong></p>
+              <p>Size: <strong id="incoming-filesize">0 Bytes</strong></p>
+              <button type="button" class="btn btn-success" id="btn-accept-file" style="margin-top: 1rem;">Accept &amp; Save File</button>
+            </div>
+          </div>
+
+          <div id="no-incoming-prompt" class="info-banner text-center">
+            <p>Awaiting incoming file transfer from peer...</p>
+          </div>
+
+          <!-- Download Progress & Stats -->
+          <div class="stats-panel hidden" id="download-stats-panel">
+            <h3>Download Progress</h3>
+            <div class="metrics-grid">
+              <div class="metric">
+                <span class="metric-label">Download Speed</span>
+                <span class="metric-value" id="rx-speed">0 MB/s</span>
+              </div>
+              <div class="metric">
+                <span class="metric-label">Received</span>
+                <span class="metric-value" id="rx-received">0 MB</span>
+              </div>
+              <div class="metric">
+                <span class="metric-label">Time Remaining</span>
+                <span class="metric-value" id="rx-time">--:--</span>
+              </div>
+              <div class="metric">
+                <span class="metric-label">Status</span>
+                <span class="metric-value" id="rx-status-text">Receiving...</span>
+              </div>
+            </div>
+
+            <div class="progress-container">
+              <div class="progress-bar-wrap">
+                <div class="progress-bar progress-bar-recv" id="rx-progress-bar" style="width: 0%"></div>
+              </div>
+              <div class="progress-details">
+                <span>Progress: <strong id="rx-progress-percent">0%</strong></span>
+                <span id="rx-integrity-status">N/A</span>
+              </div>
+              <div class="transfer-controls" style="margin-top: 1rem;">
+                <button type="button" class="btn btn-danger" id="btn-cancel-recv" style="width: 100%;">✕ Cancel Transfer</button>
+              </div>
+              <div id="rx-stall-warning" class="stall-warning hidden">⚠ No data received for 8 seconds — transfer may be stalled</div>
+              <div id="fallback-download-container" class="hidden" style="margin-top: 1.2rem; text-align: center;">
+                <button type="button" class="btn btn-success" id="btn-fallback-download" style="width: 100%;">Save Downloaded File</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Terminal Log Card -->
+      <section class="card glass shadow-box margin-top-card">
+        <div class="card-header">
+          <h2>Activity Terminal</h2>
+          <span class="badge" style="background: rgba(255,255,255,0.05); color: #fff;">Logs</span>
+        </div>
+        <div class="card-body" style="display: flex; flex-direction: column; height: 100%;">
+          <div class="console-log-container" style="flex: 1; display: flex; flex-direction: column;">
+            <div class="console-header">
+              <span>Terminal Output</span>
+              <button class="btn-clear" onclick="clearLogs()">Clear</button>
+            </div>
+            <pre class="console-log" id="console-logs">System ready. Awaiting connection...</pre>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- BOTTOM PANEL: Live Network Chart -->
+  <section class="card glass chart-card">
+    <div class="card-header">
+      <h2>Live Network &amp; Protocol Performance</h2>
+      <div class="chart-legend">
+        <span class="legend-item"><span class="legend-color tx-color"></span>TX Speed (Mbps)</span>
+        <span class="legend-item"><span class="legend-color rx-chart-color"></span>RX Speed (Mbps)</span>
+        <span class="legend-item"><span class="legend-color rtt-color"></span>RTT (ms)</span>
+      </div>
+    </div>
+    <div class="card-body chart-body">
+      <canvas id="performance-chart"></canvas>
+    </div>
+  </section>
+
+  <footer>
+    <p>🔒 End-to-end encrypted via ECDH P-256 + AES-256-GCM · Files transferred directly browser-to-browser via WebRTC</p>
+  </footer>
+
+  <!-- E2E crypto module must load BEFORE app.js -->
+  <script src="crypto-e2e.js"></script>
+  <script src="app.js"></script>
+
+  <style>
+    /* ── User pill ─────────────────────────── */
+    .user-pill {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 50px;
+      padding: 0.35rem 0.75rem 0.35rem 0.4rem;
+    }
+    .user-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #6366f1, #a855f7);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    #user-name-display { font-size: 0.85rem; font-weight: 600; color: #f1f5f9; }
+    .btn-logout {
+      background: none;
+      border: none;
+      color: #64748b;
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 0 0.25rem;
+      transition: color 0.2s;
+    }
+    .btn-logout:hover { color: #f1f5f9; }
+
+    /* ── E2E badge ─────────────────────────── */
+    .e2e-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.35rem 0.9rem;
+      border-radius: 50px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      border: 1px solid;
+      transition: all 0.3s;
+    }
+    .e2e-pending { background: rgba(245,158,11,0.1); border-color: rgba(245,158,11,0.3); color: #fbbf24; }
+    .e2e-active  { background: rgba(16,185,129,0.1); border-color: rgba(16,185,129,0.3); color: #34d399; }
+    .e2e-error   { background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.3); color: #f87171; }
+  </style>
+
+  <script>
+    // ── Auth guard ──────────────────────────────────────────────────
+    (function() {
+      const token = localStorage.getItem('ds_token');
+      const userStr = localStorage.getItem('ds_user');
+
+      if (!token || !userStr) {
+        // Redirect to login, preserving any room parameter in the URL
+        const params = window.location.search;
+        window.location.href = 'login.html' + params;
+        return;
+      }
+
+      try {
+        const user = JSON.parse(userStr);
+        const pill = document.getElementById('user-pill');
+        const avatar = document.getElementById('user-avatar');
+        const nameEl = document.getElementById('user-name-display');
+        pill.style.display = 'flex';
+        avatar.textContent = (user.name || user.email || 'U')[0].toUpperCase();
+        nameEl.textContent = user.name || user.email;
+      } catch(e) {
+        localStorage.removeItem('ds_token');
+        localStorage.removeItem('ds_user');
+        window.location.href = 'login.html' + window.location.search;
+        return;
+      }
+
+      // Logout
+      document.getElementById('btn-logout').addEventListener('click', () => {
+        localStorage.removeItem('ds_token');
+        localStorage.removeItem('ds_user');
+        window.location.href = 'login.html';
+      });
+    })();
+  </script>
+</body>
+</html>

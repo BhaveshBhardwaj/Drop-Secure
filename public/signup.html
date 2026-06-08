@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign Up — DropSecure</title>
+  <link rel="stylesheet" href="auth.css">
+</head>
+<body>
+  <div class="bg-mesh">
+    <div class="mesh-orb orb-1"></div>
+    <div class="mesh-orb orb-2"></div>
+  </div>
+  <div class="bg-grid"></div>
+
+  <div class="auth-wrapper">
+    <a href="index.html" class="auth-logo">
+      <span class="logo-bolt">⚡</span>
+      <span>Drop<span class="logo-accent">Secure</span></span>
+    </a>
+
+    <div class="auth-card">
+      <h1>Create account</h1>
+      <p class="subtitle">Start transferring files securely — free forever</p>
+
+      <div class="alert-msg" id="alert-msg"></div>
+
+      <form id="signup-form" novalidate>
+        <div class="form-group">
+          <label for="name">Full name</label>
+          <div class="input-wrap">
+            <span class="input-icon">👤</span>
+            <input type="text" id="name" name="name" placeholder="Bhavesh Bhardwaj" autocomplete="name" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="email">Email address</label>
+          <div class="input-wrap">
+            <span class="input-icon">✉️</span>
+            <input type="email" id="email" name="email" placeholder="you@example.com" autocomplete="email" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password</label>
+          <div class="input-wrap">
+            <span class="input-icon">🔑</span>
+            <input type="password" id="password" name="password" placeholder="Min 8 characters" autocomplete="new-password" required>
+          </div>
+          <div class="strength-bar-wrap">
+            <div class="strength-bar" id="strength-bar"></div>
+          </div>
+          <div class="strength-label" id="strength-label">Password strength</div>
+        </div>
+
+        <div class="form-group">
+          <label for="confirm">Confirm password</label>
+          <div class="input-wrap">
+            <span class="input-icon">🔒</span>
+            <input type="password" id="confirm" name="confirm" placeholder="Re-enter password" autocomplete="new-password" required>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-auth" id="submit-btn">
+          <div class="btn-spinner" id="spinner"></div>
+          <span class="btn-text" id="btn-text">Create Account →</span>
+        </button>
+      </form>
+
+      <div class="auth-switch">
+        Already have an account? <a href="login.html">Log in</a>
+      </div>
+    </div>
+
+    <div class="auth-secure-badge">
+      🔒 bcrypt + JWT · No plaintext passwords · Zero server file storage
+    </div>
+  </div>
+
+  <script>
+    // Redirect if already logged in
+    const token = localStorage.getItem('ds_token');
+    if (token) {
+      fetch('/api/auth/me', { headers: { 'Authorization': 'Bearer ' + token } })
+        .then(r => r.ok ? (window.location.href = 'app.html' + window.location.search) : null)
+        .catch(() => {});
+    }
+
+    const form = document.getElementById('signup-form');
+    const alertMsg = document.getElementById('alert-msg');
+    const submitBtn = document.getElementById('submit-btn');
+    const btnText = document.getElementById('btn-text');
+    const spinner = document.getElementById('spinner');
+    const passwordInput = document.getElementById('password');
+    const strengthBar = document.getElementById('strength-bar');
+    const strengthLabel = document.getElementById('strength-label');
+
+    // ── Password strength meter ──────────────────────────────────
+    passwordInput.addEventListener('input', () => {
+      const val = passwordInput.value;
+      let score = 0;
+      if (val.length >= 8) score++;
+      if (val.length >= 12) score++;
+      if (/[A-Z]/.test(val)) score++;
+      if (/[0-9]/.test(val)) score++;
+      if (/[^A-Za-z0-9]/.test(val)) score++;
+
+      const levels = [
+        { pct: '0%', color: 'transparent', label: 'Password strength' },
+        { pct: '20%', color: '#f43f5e', label: 'Very weak' },
+        { pct: '40%', color: '#f97316', label: 'Weak' },
+        { pct: '60%', color: '#f59e0b', label: 'Fair' },
+        { pct: '80%', color: '#84cc16', label: 'Good' },
+        { pct: '100%', color: '#10b981', label: 'Strong 💪' },
+      ];
+      const level = levels[Math.min(score, 5)];
+      strengthBar.style.width = level.pct;
+      strengthBar.style.backgroundColor = level.color;
+      strengthLabel.textContent = level.label;
+    });
+
+    function showAlert(msg, type = 'error') {
+      alertMsg.textContent = type === 'error' ? '⚠ ' + msg : '✓ ' + msg;
+      alertMsg.className = 'alert-msg ' + type;
+    }
+
+    function setLoading(loading) {
+      submitBtn.disabled = loading;
+      spinner.style.display = loading ? 'block' : 'none';
+      btnText.textContent = loading ? '' : 'Create Account →';
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('name').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const password = passwordInput.value;
+      const confirm = document.getElementById('confirm').value;
+
+      if (!name || !email || !password || !confirm) {
+        showAlert('Please fill in all fields.'); return;
+      }
+      if (password.length < 8) {
+        showAlert('Password must be at least 8 characters.'); return;
+      }
+      if (password !== confirm) {
+        showAlert('Passwords do not match.'); return;
+      }
+
+      setLoading(true);
+      alertMsg.className = 'alert-msg';
+
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email, password })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          showAlert(data.error || 'Registration failed. Please try again.');
+          setLoading(false);
+          return;
+        }
+
+        localStorage.setItem('ds_token', data.token);
+        localStorage.setItem('ds_user', JSON.stringify(data.user));
+
+        showAlert('Account created! Redirecting...', 'success');
+        const params = window.location.search;
+        setTimeout(() => { window.location.href = 'app.html' + params; }, 900);
+
+      } catch (err) {
+        showAlert('Network error. Is the server running?');
+        setLoading(false);
+      }
+    });
+  </script>
+</body>
+</html>
