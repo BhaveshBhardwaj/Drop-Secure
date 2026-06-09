@@ -65,13 +65,14 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 8 characters.' });
     }
 
-    const existing = await User.findOne({ email });
+    const lookupEmail = email.toLowerCase().trim();
+    const existing = await User.findOne({ email: lookupEmail });
     if (existing) {
       return res.status(409).json({ error: 'An account with this email already exists.' });
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const user = await User.create({ name, email, passwordHash });
+    const user = await User.create({ name, email: lookupEmail, passwordHash });
 
     const token = jwt.sign(
       { userId: user._id.toString(), email: user.email, name: user.name },
@@ -94,7 +95,8 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
 
-    const user = await User.findOne({ email });
+    const lookupEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: lookupEmail });
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
