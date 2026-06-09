@@ -51,10 +51,20 @@ function requireAuth(req, res, next) {
   }
 }
 
+// Middleware to check if MongoDB is connected
+function requireDb(req, res, next) {
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({
+      error: 'Database connection is currently unavailable. Please verify that your public IP address is whitelisted on your MongoDB Atlas console, then restart this server.'
+    });
+  }
+  next();
+}
+
 // ── Auth Routes ─────────────────────────────────────────────────────────────
 
 // POST /api/auth/register
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', requireDb, async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
@@ -88,7 +98,7 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 // POST /api/auth/login
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', requireDb, async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {
@@ -120,7 +130,7 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // GET /api/auth/me — verify token + return user info
-app.get('/api/auth/me', requireAuth, async (req, res) => {
+app.get('/api/auth/me', requireDb, requireAuth, async (req, res) => {
   try {
     const user = await User.findById(req.user.userId).select('-passwordHash');
     if (!user) return res.status(404).json({ error: 'User not found.' });
