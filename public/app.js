@@ -41,9 +41,9 @@ let isDownloading = false;
 let writeQueue = [];
 let isWriting = false;
 
-// ── Chunk pipeline ─────────────────────────────────────────
-let nextChunkBuffer = null;  // Pre-read next chunk while sending current
-let isReadingNext = false;
+// ── Receiver incoming buffer queue (prevent out-of-order decryption/processing) ──
+let rxQueue = [];
+let isProcessingRx = false;
 
 // ── Protocol settings ─────────────────────────────────────
 let chunkSize = 16384;
@@ -481,6 +481,8 @@ function setupRxChannel(channel) {
             downloadLastTime = downloadStartTime;
             downloadLastBytes = 0;
             rxLastProgressBytes = 0;
+            rxQueue = [];
+            isProcessingRx = false;
 
             // Signal sender we are ready
             if (rxChannel && rxChannel.readyState === 'open') {
@@ -503,10 +505,9 @@ function setupRxChannel(channel) {
         isDownloading = false;
         stopRxStallTimer();
 
-        if (writeQueue.length === 0 && !isWriting) {
+        if (rxQueue.length === 0 && !isProcessingRx && writeQueue.length === 0 && !isWriting && fileWriter) {
           await closeFileWriter();
         }
-        // If writes are still in progress, processWriteQueue will call closeFileWriter when done.
       } else if (msg.type === 'cancel') {
         log('Sender cancelled the transfer.');
         stopRxStallTimer();
@@ -516,38 +517,60 @@ function setupRxChannel(channel) {
 
     } else {
       // Binary chunk received
-      const encChunk = event.data;
-      let decChunk;
-
-      if (window.E2E && E2E.ready()) {
-        try {
-          if (downloadReceivedSize === 0) {
-            log('🔒 E2E: Decrypting incoming chunks using AES-256-GCM...');
-          }
-          decChunk = await E2E.decryptChunk(encChunk);
-        } catch (err) {
-          log(`❌ Decryption error: ${err.message}`);
-          cancelRecv();
-          return;
-        }
-      } else {
-        log('⚠️ E2E decryption is not ready. Aborting transfer.');
-        cancelRecv();
-        return;
-      }
-
-      downloadReceivedSize += decChunk.byteLength;
-      writeChunk(decChunk);
-
-      // Reset stall timer — we got data
-      resetRxStallTimer();
-
-      // Fast progress bar update
-      const pct = ((downloadReceivedSize / downloadFileSize) * 100).toFixed(1);
-      elRxProgressBar.style.width = `${pct}%`;
-      elRxProgressPercent.textContent = `${pct}%`;
+      rxQueue.push(event.data);
+      processRxQueue();
     }
   };
+}
+
+// ============================================================
+// Receiver Queue Processor — Decrypts and processes chunks sequentially
+// ============================================================
+async function processRxQueue() {
+  if (isProcessingRx || rxQueue.length === 0) return;
+  isProcessingRx = true;
+
+  while (rxQueue.length > 0) {
+    const encChunk = rxQueue.shift();
+    let decChunk;
+
+    if (window.E2E && E2E.ready()) {
+      try {
+        if (downloadReceivedSize === 0) {
+          log('🔒 E2E: Decrypting incoming chunks using AES-256-GCM...');
+        }
+        decChunk = await E2E.decryptChunk(encChunk);
+      } catch (err) {
+        log(`❌ Decryption error: ${err.message}`);
+        cancelRecv();
+        isProcessingRx = false;
+        return;
+      }
+    } else {
+      log('⚠️ E2E decryption is not ready. Aborting transfer.');
+      cancelRecv();
+      isProcessingRx = false;
+      return;
+    }
+
+    downloadReceivedSize += decChunk.byteLength;
+    writeChunk(decChunk);
+
+    // Reset stall timer — we got data
+    resetRxStallTimer();
+
+    // Fast progress bar update
+    const pct = ((downloadReceivedSize / downloadFileSize) * 100).toFixed(1);
+    elRxProgressBar.style.width = `${pct}%`;
+    elRxProgressPercent.textContent = `${pct}%`;
+  }
+
+  isProcessingRx = false;
+
+  // If download signalled 'done' and queues are now drained, close the file
+  if (!isDownloading && rxQueue.length === 0 && !isProcessingRx && writeQueue.length === 0 && !isWriting && fileWriter) {
+    await closeFileWriter();
+  }
 }
 
 // ============================================================
@@ -589,8 +612,8 @@ async function processWriteQueue() {
 
   isWriting = false;
 
-  // If download signalled 'done' and queue is now drained, close the file
-  if (!isDownloading && writeQueue.length === 0 && fileWriter) {
+  // If download signalled 'done' and queues are now drained, close the file
+  if (!isDownloading && rxQueue.length === 0 && !isProcessingRx && writeQueue.length === 0 && !isWriting && fileWriter) {
     await closeFileWriter();
   }
 }
@@ -672,8 +695,6 @@ async function startStreaming() {
   uploadLastTime = uploadStartTime;
   uploadLastBytes = 0;
   txLastProgressBytes = 0;
-  nextChunkBuffer = null;
-  isReadingNext = false;
 
   if (elTxChunkSize) elTxChunkSize.textContent = `${(chunkSize / 1024).toFixed(0)} KB`;
 
@@ -684,104 +705,76 @@ async function startStreaming() {
   startStatsInterval();
   startTxStallTimer();
 
-  // Backpressure: resume sending when buffer drains
-  txChannel.bufferedAmountLowThreshold = 65536;
-  txChannel.onbufferedamountlow = () => {
-    if (!isPaused) sendNextChunks();
-  };
-
-  // Pre-read the first chunk immediately
-  await preReadNextChunk();
   sendNextChunks();
-}
-
-/**
- * Pre-reads the next chunk from disk into nextChunkBuffer so it's
- * ready to send as soon as the current chunk has been transmitted.
- */
-async function preReadNextChunk() {
-  const offset = uploadOffset + (nextChunkBuffer ? nextChunkBuffer.byteLength : 0);
-  if (offset >= selectedFile.size || isReadingNext) return;
-  isReadingNext = true;
-  const slice = selectedFile.slice(offset, offset + chunkSize);
-  nextChunkBuffer = await slice.arrayBuffer();
-  isReadingNext = false;
 }
 
 async function sendNextChunks() {
   if (!isUploading || isPaused) return;
 
-  while (uploadOffset < selectedFile.size) {
-    if (txChannel.bufferedAmount > MAX_BUFFERED_AMOUNT) {
-      // Back-pressure: wait for onbufferedamountlow
-      return;
-    }
+  try {
+    while (uploadOffset < selectedFile.size) {
+      if (!isUploading || isPaused) return;
 
-    // Speed throttling
-    if (speedLimit > 0) {
-      const now = performance.now();
-      const elapsed = now - lastChunkTime;
-      const minTime = (chunkSize / speedLimit) * 1000;
-      if (elapsed < minTime) {
-        setTimeout(() => { if (!isPaused) sendNextChunks(); }, minTime - elapsed);
-        return;
+      // Backpressure check: if buffer is full, wait a bit and check again
+      if (txChannel.bufferedAmount > MAX_BUFFERED_AMOUNT) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        continue;
       }
-    }
 
-    // Use pre-read buffer if available, otherwise read now
-    let buffer;
-    if (nextChunkBuffer) {
-      buffer = nextChunkBuffer;
-      nextChunkBuffer = null;
-    } else {
+      // Speed throttling
+      if (speedLimit > 0) {
+        const now = performance.now();
+        const elapsed = now - lastChunkTime;
+        const minTime = (chunkSize / speedLimit) * 1000;
+        if (elapsed < minTime) {
+          await new Promise(resolve => setTimeout(resolve, minTime - elapsed));
+          continue;
+        }
+      }
+
+      // Read current chunk directly from disk
       const chunk = selectedFile.slice(uploadOffset, uploadOffset + chunkSize);
-      buffer = await chunk.arrayBuffer();
-    }
+      const buffer = await chunk.arrayBuffer();
 
-    let encryptedBuffer = buffer;
-    if (window.E2E && E2E.ready()) {
-      try {
+      let encryptedBuffer = buffer;
+      if (window.E2E && E2E.ready()) {
         if (uploadOffset === 0) {
           log('🔒 E2E: Encrypting outgoing chunks using AES-256-GCM...');
         }
         encryptedBuffer = await E2E.encryptChunk(buffer);
-      } catch (err) {
-        log(`❌ Encryption error: ${err.message}`);
+      } else {
+        log('⚠️ E2E encryption is not ready. Aborting transfer.');
         cancelSend();
         return;
       }
-    } else {
-      log('⚠️ E2E encryption is not ready. Aborting transfer.');
-      cancelSend();
-      return;
+
+      txChannel.send(encryptedBuffer);
+      uploadOffset += buffer.byteLength;
+      lastChunkTime = performance.now();
+
+      // Update progress UI
+      const pct = ((uploadOffset / selectedFile.size) * 100).toFixed(1);
+      elTxProgressBar.style.width = `${pct}%`;
+      elTxProgressPercent.textContent = `${pct}%`;
+      if (elTxChunkSize) elTxChunkSize.textContent = `${(chunkSize / 1024).toFixed(0)} KB`;
+
+      // Reset stall timer — we just sent data
+      resetTxStallTimer();
     }
 
-    txChannel.send(encryptedBuffer);
-    uploadOffset += buffer.byteLength;
-    lastChunkTime = performance.now();
-
-    // Update progress UI
-    const pct = ((uploadOffset / selectedFile.size) * 100).toFixed(1);
-    elTxProgressBar.style.width = `${pct}%`;
-    elTxProgressPercent.textContent = `${pct}%`;
-    if (elTxChunkSize) elTxChunkSize.textContent = `${(chunkSize / 1024).toFixed(0)} KB`;
-
-    // Reset stall timer — we just sent data
-    resetTxStallTimer();
-
-    // Pre-read the next chunk in background (pipeline)
-    preReadNextChunk();
-  }
-
-  if (uploadOffset >= selectedFile.size) {
-    txChannel.send(JSON.stringify({ type: 'done' }));
-    log('Upload complete. Sent "done" signal to receiver.');
-    elTxStatusText.textContent = 'Done ✓';
-    isUploading = false;
-    isPaused = false;
-    stopTxStallTimer();
-    elBtnPauseSend.style.display = 'none';
-    elBtnResumeSend.style.display = 'none';
+    if (uploadOffset >= selectedFile.size) {
+      txChannel.send(JSON.stringify({ type: 'done' }));
+      log('Upload complete. Sent "done" signal to receiver.');
+      elTxStatusText.textContent = 'Done ✓';
+      isUploading = false;
+      isPaused = false;
+      stopTxStallTimer();
+      elBtnPauseSend.style.display = 'none';
+      elBtnResumeSend.style.display = 'none';
+    }
+  } catch (err) {
+    log(`❌ Transmission error: ${err.message}`);
+    cancelSend();
   }
 }
 
@@ -983,7 +976,6 @@ function resetUploadUI() {
   elTxStatusText.textContent = 'Ready';
   if (elBtnPauseSend) { elBtnPauseSend.style.display = ''; }
   if (elBtnResumeSend) { elBtnResumeSend.style.display = 'none'; }
-  nextChunkBuffer = null;
 }
 
 async function resetDownloadUI() {
@@ -1002,6 +994,8 @@ async function resetDownloadUI() {
   fileWriter = null;
   writeQueue = [];
   isWriting = false;
+  rxQueue = [];
+  isProcessingRx = false;
 
   // Abort the FileSystemWritableFileStream to clean up the .crswap temp file
   if (writer && typeof writer.abort === 'function') {

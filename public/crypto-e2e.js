@@ -111,12 +111,12 @@ const E2E = (() => {
     if (!isReady) throw new Error('E2E key not established yet');
 
     const enc = new Uint8Array(encBuffer);
-    const aad = enc.slice(0, 4);
-    const iv = enc.slice(4, 16);
-    const ciphertext = enc.slice(16);
+    const aad = enc.subarray(0, 4);
+    const iv = enc.subarray(4, 16);
+    const ciphertext = enc.subarray(16);
 
     // Verify sequence number matches what we expect
-    const receivedSeq = new DataView(aad.buffer, aad.byteOffset, 4).getUint32(0, false);
+    const receivedSeq = new DataView(encBuffer, 0, 4).getUint32(0, false);
     if (receivedSeq !== seqRecv) {
       console.warn(`[E2E] Sequence mismatch: expected ${seqRecv}, got ${receivedSeq}. Possible replay attack.`);
     }
