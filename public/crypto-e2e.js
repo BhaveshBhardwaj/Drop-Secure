@@ -150,5 +150,7 @@ const E2E = (() => {
     seqRecv = 0;
   }
 
-  return { init, deriveSharedKey, encryptChunk, decryptChunk, getMyPublicKey, ready, onReady, reset };
+  const module = { init, deriveSharedKey, encryptChunk, decryptChunk, getMyPublicKey, ready, onReady, reset };
+  window.E2E = module;
+  return module;
 })();

@@ -471,6 +471,11 @@ function setupRxChannel(channel) {
           await closeFileWriter();
         }
         // If writes are still in progress, processWriteQueue will call closeFileWriter when done.
+      } else if (msg.type === 'cancel') {
+        log('Sender cancelled the transfer.');
+        stopRxStallTimer();
+        resetDownloadUI();
+        elRxStatusText.textContent = 'Cancelled by sender';
       }
 
     } else {
