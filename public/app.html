@@ -39,6 +39,10 @@
           <span id="user-name-display">User</span>
           <button class="btn-logout" id="btn-logout" title="Log out">↩</button>
         </div>
+        <!-- Guest login link -->
+        <div id="guest-login-wrap" style="display:none;">
+          <a href="login.html" id="link-guest-login" style="padding: 0.35rem 0.8rem; font-size: 0.8rem; border-radius: 50px; background: rgba(99, 102, 241, 0.15); color: #a5b4fc; text-decoration: none; font-weight: 600; border: 1px solid rgba(99, 102, 241, 0.3); transition: all 0.2s;">Log In</a>
+        </div>
       </div>
     </div>
   </header>
@@ -358,27 +362,35 @@
     (function() {
       const token = localStorage.getItem('ds_token');
       const userStr = localStorage.getItem('ds_user');
+      const guestLoginWrap = document.getElementById('guest-login-wrap');
+      const pill = document.getElementById('user-pill');
+      const linkGuestLogin = document.getElementById('link-guest-login');
 
-      if (!token || !userStr) {
-        // Redirect to login, preserving any room parameter in the URL
-        const params = window.location.search;
-        window.location.href = 'login.html' + params;
-        return;
+      // Append room params to the Log In button so they aren't lost if guest decides to log in
+      if (linkGuestLogin) {
+        linkGuestLogin.href = 'login.html' + window.location.search;
       }
 
-      try {
-        const user = JSON.parse(userStr);
-        const pill = document.getElementById('user-pill');
-        const avatar = document.getElementById('user-avatar');
-        const nameEl = document.getElementById('user-name-display');
-        pill.style.display = 'flex';
-        avatar.textContent = (user.name || user.email || 'U')[0].toUpperCase();
-        nameEl.textContent = user.name || user.email;
-      } catch(e) {
-        localStorage.removeItem('ds_token');
-        localStorage.removeItem('ds_user');
-        window.location.href = 'login.html' + window.location.search;
-        return;
+      if (token && userStr) {
+        try {
+          const user = JSON.parse(userStr);
+          const avatar = document.getElementById('user-avatar');
+          const nameEl = document.getElementById('user-name-display');
+          
+          if (pill) pill.style.display = 'flex';
+          if (guestLoginWrap) guestLoginWrap.style.display = 'none';
+          
+          if (avatar) avatar.textContent = (user.name || user.email || 'U')[0].toUpperCase();
+          if (nameEl) nameEl.textContent = user.name || user.email;
+        } catch(e) {
+          localStorage.removeItem('ds_token');
+          localStorage.removeItem('ds_user');
+          if (pill) pill.style.display = 'none';
+          if (guestLoginWrap) guestLoginWrap.style.display = 'block';
+        }
+      } else {
+        if (pill) pill.style.display = 'none';
+        if (guestLoginWrap) guestLoginWrap.style.display = 'block';
       }
 
       // Logout
