@@ -159,8 +159,44 @@ function connectWebSocket() {
         elRoomSetup.classList.add('hidden');
         elTransferSection.classList.remove('hidden');
         log(`Joined room ${roomId} as ${isInitiator ? 'initiator' : 'receiver'}.`);
+        
+        // Setup QR code & copy link button
+        const shareUrl = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
+        const btnCopy = document.getElementById('btn-copy-link');
+        const shareControls = document.getElementById('share-controls');
+        
+        if (shareControls) {
+          shareControls.style.display = isInitiator ? 'flex' : 'none';
+        }
+        
+        if (isInitiator && window.QRCode) {
+          const qrcodeContainer = document.getElementById('qrcode');
+          if (qrcodeContainer) {
+            qrcodeContainer.innerHTML = '';
+            new QRCode(qrcodeContainer, {
+              text: shareUrl,
+              width: 128,
+              height: 128,
+              colorDark : "#000000",
+              colorLight : "#ffffff",
+              correctLevel : QRCode.CorrectLevel.H
+            });
+          }
+        }
+        
+        if (btnCopy) {
+          btnCopy.onclick = () => {
+            navigator.clipboard.writeText(shareUrl).then(() => {
+              btnCopy.textContent = '✓ Copied!';
+              setTimeout(() => { btnCopy.textContent = '📋 Copy Share Link'; }, 2000);
+            }).catch(() => {
+              alert('Could not copy automatically. URL is: ' + shareUrl);
+            });
+          };
+        }
+
         if (isInitiator) {
-          elPeerRoleText.innerHTML = `Waiting for peer to join...<br><small>Share link: ${window.location.origin}?room=${roomId}</small>`;
+          elPeerRoleText.innerHTML = `Waiting for peer to join...<br><small>Share link: ${shareUrl}</small>`;
         } else {
           elPeerRoleText.textContent = 'Connecting to peer...';
         }
@@ -485,6 +521,9 @@ function setupRxChannel(channel) {
 
       if (window.E2E && E2E.ready()) {
         try {
+          if (downloadReceivedSize === 0) {
+            log('🔒 E2E: Decrypting incoming chunks using AES-256-GCM...');
+          }
           decChunk = await E2E.decryptChunk(encChunk);
         } catch (err) {
           log(`❌ Decryption error: ${err.message}`);
@@ -702,6 +741,9 @@ async function sendNextChunks() {
     let encryptedBuffer = buffer;
     if (window.E2E && E2E.ready()) {
       try {
+        if (uploadOffset === 0) {
+          log('🔒 E2E: Encrypting outgoing chunks using AES-256-GCM...');
+        }
         encryptedBuffer = await E2E.encryptChunk(buffer);
       } catch (err) {
         log(`❌ Encryption error: ${err.message}`);
@@ -980,6 +1022,8 @@ function resetUI() {
   elRoomSetup.classList.remove('hidden');
   elTransferSection.classList.add('hidden');
   updateConnectionUI('idle', 'Disconnected');
+  const shareControls = document.getElementById('share-controls');
+  if (shareControls) shareControls.style.display = 'none';
 }
 
 // ============================================================

@@ -77,8 +77,16 @@
             <div class="info-banner">
               <p>Connected! Room ID: <strong id="current-room-id" class="highlight">-----</strong></p>
               <p class="text-small" id="peer-role-text">Waiting for connection...</p>
+              
+              <!-- QR Code & Link Sharing -->
+              <div id="share-controls" style="margin-top: 1.2rem; display: flex; flex-direction: column; align-items: center; gap: 0.8rem;">
+                <button type="button" class="btn btn-secondary" id="btn-copy-link" style="width: 100%; padding: 0.5rem; font-size: 0.85rem; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); color: #a5b4fc; border-radius: 6px; cursor: pointer; transition: all 0.2s;">📋 Copy Share Link</button>
+                <div id="qrcode-wrap" style="padding: 0.6rem; background: #fff; border-radius: 8px; display: inline-block;">
+                  <div id="qrcode"></div>
+                </div>
+              </div>
             </div>
-            <button type="button" class="btn btn-danger" id="btn-disconnect" style="width: 100%;">Disconnect</button>
+            <button type="button" class="btn btn-danger" id="btn-disconnect" style="width: 100%; margin-top: 0.8rem;">Disconnect</button>
           </div>
         </div>
       </section>
@@ -286,6 +294,8 @@
     <p>🔒 End-to-end encrypted via ECDH P-256 + AES-256-GCM · Files transferred directly browser-to-browser via WebRTC</p>
   </footer>
 
+  <!-- QRCode.js for generating connection QR codes -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <!-- E2E crypto module must load BEFORE app.js -->
   <script src="crypto-e2e.js"></script>
   <script src="app.js"></script>
