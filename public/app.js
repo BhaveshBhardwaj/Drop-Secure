@@ -561,7 +561,7 @@ async function processRxQueue() {
       } else if (msg.type === 'file_done') {
         log(`Finished receiving file ${msg.index}`);
         if (fileWriter && typeof fileWriter.write === 'function') {
-          writeQueue.push({ type: 'CMD', cmd: 'CLOSE_FILE' });
+          writeQueue.push({ type: 'CMD', cmd: 'CLOSE_FILE', writer: fileWriter });
           processWriteQueue();
         } else if (Array.isArray(fileWriter)) {
           // Memory fallback zip or download logic could go here if needed.
@@ -596,7 +596,7 @@ async function processRxQueue() {
       totalReceivedBytes += decChunk.byteLength;
       
       if (fileWriter && typeof fileWriter.write === 'function') {
-        writeQueue.push(decChunk);
+        writeQueue.push({ writer: fileWriter, data: decChunk });
         processWriteQueue();
       } else if (Array.isArray(fileWriter)) {
         fileWriter.push(decChunk);
@@ -623,12 +623,11 @@ async function processWriteQueue() {
     const item = writeQueue.shift();
     try {
       if (item.type === 'CMD' && item.cmd === 'CLOSE_FILE') {
-        if (fileWriter) {
-          await fileWriter.close();
-          fileWriter = null;
+        if (item.writer) {
+          await item.writer.close();
         }
-      } else if (fileWriter && typeof fileWriter.write === 'function') {
-        await fileWriter.write(item);
+      } else if (item.writer && typeof item.writer.write === 'function') {
+        await item.writer.write(item.data);
       }
     } catch (e) {
       log(`Disk write error: ${e.message}`);
