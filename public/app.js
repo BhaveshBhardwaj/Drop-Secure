@@ -572,6 +572,16 @@ async function processRxQueue() {
         isDownloading = false;
         stopRxStallTimer();
         elRxStatusText.textContent = 'Saved ✓';
+        if (elBtnCancelRecv) elBtnCancelRecv.style.display = 'none';
+
+        // Force final 100% UI reflection
+        const pct = ((totalReceivedBytes / downloadFileSize) * 100).toFixed(1);
+        elRxProgressBar.style.width = `${pct}%`;
+        elRxProgressPercent.textContent = `${pct}%`;
+        elRxReceived.textContent = `${(totalReceivedBytes / (1024 * 1024)).toFixed(1)} MB / ${(downloadFileSize / (1024 * 1024)).toFixed(1)} MB`;
+
+        setTimeout(() => alert('All files have been successfully received and saved!'), 100);
+
         if (Array.isArray(fileWriter) && incomingFiles.length === 1) {
            triggerFallbackDownload(incomingFiles[0].name, fileWriter);
         }
@@ -805,6 +815,15 @@ async function sendNextChunks() {
     stopTxStallTimer();
     elBtnPauseSend.style.display = 'none';
     elBtnResumeSend.style.display = 'none';
+    if (elBtnCancelSend) elBtnCancelSend.style.display = 'none';
+    
+    // Force final 100% UI reflection
+    const pct = ((totalUploadedBytes / totalUploadSize) * 100).toFixed(1);
+    elTxProgressBar.style.width = `${pct}%`;
+    elTxProgressPercent.textContent = `${pct}%`;
+    elTxSent.textContent = `${(totalUploadedBytes / (1024 * 1024)).toFixed(1)} MB / ${(totalUploadSize / (1024 * 1024)).toFixed(1)} MB`;
+    
+    setTimeout(() => alert('All files have been successfully sent!'), 100);
     
   } catch (err) {
     log(`❌ Transmission error: ${err.message}`);
@@ -1008,6 +1027,7 @@ function resetUploadUI() {
   elTxStatusText.textContent = 'Ready';
   if (elBtnPauseSend) { elBtnPauseSend.style.display = ''; }
   if (elBtnResumeSend) { elBtnResumeSend.style.display = 'none'; }
+  if (elBtnCancelSend) { elBtnCancelSend.style.display = ''; }
 }
 
 async function resetDownloadUI() {
@@ -1018,6 +1038,7 @@ async function resetDownloadUI() {
   elNoIncomingPrompt.classList.remove('hidden');
   elRxProgressBar.style.width = '0%';
   elRxProgressPercent.textContent = '0%';
+  if (elBtnCancelRecv) { elBtnCancelRecv.style.display = ''; }
   if (elFallbackDownloadContainer) elFallbackDownloadContainer.classList.add('hidden');
   if (elBtnFallbackDownload) elBtnFallbackDownload.onclick = null;
   downloadedBlob = null;
