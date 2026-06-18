@@ -714,6 +714,12 @@ async function startStreaming() {
   sendNextChunks();
 }
 
+const yieldToMain = () => new Promise(resolve => {
+  const channel = new MessageChannel();
+  channel.port1.onmessage = resolve;
+  channel.port2.postMessage(null);
+});
+
 async function sendNextChunks() {
   if (!isUploading || isPaused) return;
 
@@ -727,7 +733,7 @@ async function sendNextChunks() {
         log(`Starting file ${currentFileIndex + 1}/${filesToSend.length}: ${currentFileObj.relativePath}`);
         txChannel.send(JSON.stringify({ type: 'file_start', index: currentFileIndex }));
         // Wait a tiny bit for the receiver to process the start message and open the writer
-        await new Promise(r => setTimeout(r, 50));
+        await yieldToMain();
       }
 
       while (uploadOffset < selectedFile.size) {
@@ -739,7 +745,14 @@ async function sendNextChunks() {
         if (buffered > MAX_BUFFERED_AMOUNT) {
           // Buffer full: Multiplicative decrease & wait
           chunkSize = Math.max(4096, Math.floor(chunkSize * 0.75));
-          await new Promise(resolve => setTimeout(resolve, 50));
+          await new Promise(resolve => {
+            txChannel.bufferedAmountLowThreshold = MAX_BUFFERED_AMOUNT / 2;
+            const onLow = () => {
+              txChannel.removeEventListener('bufferedamountlow', onLow);
+              resolve();
+            };
+            txChannel.addEventListener('bufferedamountlow', onLow);
+          });
           continue;
         } else if (buffered > MAX_BUFFERED_AMOUNT / 2 || lastRtt > 150) {
           // Moderate congestion: slight decrease
@@ -781,7 +794,7 @@ async function sendNextChunks() {
       
       currentFileIndex++;
       uploadOffset = 0;
-      await new Promise(r => setTimeout(r, 50)); // Tiny yield between files
+      await yieldToMain(); // Tiny yield between files
     }
 
     // All files complete
@@ -850,22 +863,22 @@ function cancelRecv() {
 // ============================================================
 function startTxStallTimer() {
   stopTxStallTimer();
-  txLastProgressBytes = uploadOffset;
+  txLastProgressBytes = totalUploadedBytes;
   txStallTimer = setInterval(() => {
     if (!isUploading || isPaused) { stopTxStallTimer(); return; }
-    if (uploadOffset === txLastProgressBytes) {
+    if (totalUploadedBytes === txLastProgressBytes) {
       // No progress in the last STALL_TIMEOUT_MS
       if (elTxStallWarning) elTxStallWarning.classList.remove('hidden');
       log(`⚠ TX stall detected — no data sent in ${STALL_TIMEOUT_MS / 1000}s`);
     } else {
       if (elTxStallWarning) elTxStallWarning.classList.add('hidden');
     }
-    txLastProgressBytes = uploadOffset;
+    txLastProgressBytes = totalUploadedBytes;
   }, STALL_TIMEOUT_MS);
 }
 
 function resetTxStallTimer() {
-  txLastProgressBytes = uploadOffset;
+  txLastProgressBytes = totalUploadedBytes;
 }
 
 function stopTxStallTimer() {
@@ -875,21 +888,21 @@ function stopTxStallTimer() {
 
 function startRxStallTimer() {
   stopRxStallTimer();
-  rxLastProgressBytes = downloadReceivedSize;
+  rxLastProgressBytes = totalReceivedBytes;
   rxStallTimer = setInterval(() => {
     if (!isDownloading) { stopRxStallTimer(); return; }
-    if (downloadReceivedSize === rxLastProgressBytes) {
+    if (totalReceivedBytes === rxLastProgressBytes) {
       if (elRxStallWarning) elRxStallWarning.classList.remove('hidden');
       log(`⚠ RX stall detected — no data received in ${STALL_TIMEOUT_MS / 1000}s`);
     } else {
       if (elRxStallWarning) elRxStallWarning.classList.add('hidden');
     }
-    rxLastProgressBytes = downloadReceivedSize;
+    rxLastProgressBytes = totalReceivedBytes;
   }, STALL_TIMEOUT_MS);
 }
 
 function resetRxStallTimer() {
-  rxLastProgressBytes = downloadReceivedSize;
+  rxLastProgressBytes = totalReceivedBytes;
 }
 
 function stopRxStallTimer() {
@@ -922,42 +935,42 @@ function startStatsInterval() {
     // ── TX Stats ────────────────────────────────────────────
     if (isUploading) {
       const timeDelta = (now - uploadLastTime) / 1000;
-      const byteDelta = uploadOffset - uploadLastBytes;
+      const byteDelta = totalUploadedBytes - uploadLastBytes;
       const speedBytesSec = timeDelta > 0 ? byteDelta / timeDelta : 0;
       txSpeedMbps = (speedBytesSec * 8) / (1024 * 1024);
 
       elTxSpeed.textContent = `${(speedBytesSec / (1024 * 1024)).toFixed(2)} MB/s (${txSpeedMbps.toFixed(1)} Mbps)`;
-      elTxSent.textContent = `${(uploadOffset / (1024 * 1024)).toFixed(1)} MB / ${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB`;
+      elTxSent.textContent = `${(totalUploadedBytes / (1024 * 1024)).toFixed(1)} MB / ${(totalUploadSize / (1024 * 1024)).toFixed(1)} MB`;
 
       if (speedBytesSec > 0) {
-        const remaining = Math.round((selectedFile.size - uploadOffset) / speedBytesSec);
+        const remaining = Math.round((totalUploadSize - totalUploadedBytes) / speedBytesSec);
         elTxTime.textContent = formatTime(remaining);
       } else {
         elTxTime.textContent = isPaused ? 'Paused' : '--:--';
       }
 
-      uploadLastBytes = uploadOffset;
+      uploadLastBytes = totalUploadedBytes;
       uploadLastTime = now;
     }
 
     // ── RX Stats ────────────────────────────────────────────
     if (isDownloading) {
       const timeDelta = (now - downloadLastTime) / 1000;
-      const byteDelta = downloadReceivedSize - downloadLastBytes;
+      const byteDelta = totalReceivedBytes - downloadLastBytes;
       const speedBytesSec = timeDelta > 0 ? byteDelta / timeDelta : 0;
       rxSpeedMbps = (speedBytesSec * 8) / (1024 * 1024);
 
       elRxSpeed.textContent = `${(speedBytesSec / (1024 * 1024)).toFixed(2)} MB/s (${rxSpeedMbps.toFixed(1)} Mbps)`;
-      elRxReceived.textContent = `${(downloadReceivedSize / (1024 * 1024)).toFixed(1)} MB / ${(downloadFileSize / (1024 * 1024)).toFixed(1)} MB`;
+      elRxReceived.textContent = `${(totalReceivedBytes / (1024 * 1024)).toFixed(1)} MB / ${(downloadFileSize / (1024 * 1024)).toFixed(1)} MB`;
 
       if (speedBytesSec > 0) {
-        const remaining = Math.round((downloadFileSize - downloadReceivedSize) / speedBytesSec);
+        const remaining = Math.round((downloadFileSize - totalReceivedBytes) / speedBytesSec);
         elRxTime.textContent = formatTime(remaining);
       } else {
         elRxTime.textContent = '--:--';
       }
 
-      downloadLastBytes = downloadReceivedSize;
+      downloadLastBytes = totalReceivedBytes;
       downloadLastTime = now;
     }
 
