@@ -95,56 +95,25 @@
         </div>
       </section>
 
-      <!-- Transmission Settings Card -->
-      <section class="card glass shadow-box margin-top-card" id="settings-card">
-        <div class="card-header">
-          <h2>2. Transmission Settings</h2>
-          <span class="badge" style="background: rgba(255,255,255,0.05); color: #fff;">Config</span>
-        </div>
-
-        <div class="card-body">
-          <div class="form-group">
-            <label for="chunk-size-select">Dynamic Chunk Size:</label>
-            <select id="chunk-size-select" style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.25); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-color); font-family: var(--font-sans); font-size: 0.95rem;">
-              <option value="4096">4 KB</option>
-              <option value="8192">8 KB</option>
-              <option value="16384" selected>16 KB (Standard / Balanced)</option>
-              <option value="32768">32 KB</option>
-              <option value="64512">64 KB</option>
-              <option value="131072">128 KB</option>
-              <option value="262144">256 KB (Max throughput)</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label for="speedLimit">Upload Speed Limit: <span id="speed-limit-val" class="highlight">Unlimited</span></label>
-            <div class="slider-container">
-              <input type="range" id="speedLimit" min="0" max="100" value="0" step="1" disabled>
-              <span class="slider-label"><span>0 (Max)</span><span>100 MB/s</span></span>
-            </div>
-          </div>
-
-          <div style="background: rgba(99, 102, 241, 0.05); border: 1px solid rgba(99, 102, 241, 0.15); border-radius: 8px; padding: 0.75rem; font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;" id="protocol-analysis">
-            <strong>Optimal Config Tip:</strong> Standard 16 KB chunk size is recommended for most network conditions.
-          </div>
-        </div>
-      </section>
-
       <!-- Send File Card -->
       <section class="card glass shadow-box margin-top-card" id="send-card">
         <div class="card-header">
-          <h2>3. Send File (Upload)</h2>
+          <h2>2. Send Files & Folders</h2>
           <span class="badge badge-sender">Sender</span>
         </div>
 
         <div class="card-body">
           <div class="form-group">
-            <label for="file-input">Select a file to send:</label>
-            <input type="file" id="file-input" class="file-input-btn" disabled>
+            <label>Select content to send:</label>
+            <div style="display: flex; gap: 1rem;">
+              <button type="button" class="btn" style="background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.2);" id="btn-select-file" disabled>📄 Select File(s)</button>
+              <button type="button" class="btn" style="background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.2);" id="btn-select-folder" disabled>📁 Select Folder</button>
+            </div>
+            <div id="selected-files-list" style="margin-top: 1rem; color: var(--text-muted); font-size: 0.85rem; max-height: 100px; overflow-y: auto; background: rgba(0,0,0,0.2); padding: 0.5rem; border-radius: 6px; border: 1px solid var(--border-color);">No content selected.</div>
           </div>
 
           <div class="action-buttons">
-            <button type="button" class="btn btn-primary" id="btn-start-send" disabled>Send File</button>
+            <button type="button" class="btn btn-primary" id="btn-start-send" disabled>Start Transfer</button>
           </div>
 
           <!-- Upload Progress & Stats -->
@@ -198,7 +167,7 @@
       <!-- Receive File Card -->
       <section class="card glass shadow-box" id="receive-card">
         <div class="card-header">
-          <h2>4. Receive File (Download)</h2>
+          <h2>3. Receive Files & Folders</h2>
           <span class="badge badge-receiver">Receiver</span>
         </div>
 
@@ -256,6 +225,25 @@
                 <button type="button" class="btn btn-success" id="btn-fallback-download" style="width: 100%;">Save Downloaded File</button>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Chat Card -->
+      <section class="card glass shadow-box margin-top-card" id="chat-card">
+        <div class="card-header">
+          <h2>Secure Chat</h2>
+          <span class="badge" style="background: rgba(16, 185, 129, 0.1); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">E2E Encrypted</span>
+        </div>
+        <div class="card-body" style="display: flex; flex-direction: column; height: 300px;">
+          <div id="chat-messages" style="flex: 1; overflow-y: auto; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem; border-radius: 8px; background: rgba(0,0,0,0.2); margin-bottom: 0.8rem; border: 1px solid var(--border-color);">
+            <div style="text-align: center; color: var(--text-muted); font-size: 0.8rem; margin-top: auto; margin-bottom: auto;">
+              Connect to a peer to start chatting securely.
+            </div>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <textarea id="chat-input" placeholder="Type a message..." style="flex: 1; resize: none; padding: 0.6rem; border-radius: 8px; border: 1px solid var(--border-color); background: rgba(0,0,0,0.3); color: var(--text-color); font-family: var(--font-sans); font-size: 0.9rem;" rows="2" disabled></textarea>
+            <button type="button" class="btn btn-primary" id="btn-send-chat" style="padding: 0 1rem; border-radius: 8px;" disabled>Send</button>
           </div>
         </div>
       </section>

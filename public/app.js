@@ -16,7 +16,8 @@ let isInitiator = false;
 let roomId = null;
 
 // ── Upload State (Sending) ─────────────────────────────────
-let selectedFile = null;
+let filesToSend = []; // Array of { file: File, relativePath: string }
+let currentFileIndex = 0;
 let uploadOffset = 0;
 let uploadStartTime = 0;
 let uploadLastBytes = 0;
@@ -24,7 +25,8 @@ let uploadLastTime = 0;
 let isUploading = false;
 let isPaused = false;
 let lastChunkTime = 0;
-let speedLimit = 0; // Bytes per second, 0 = unlimited
+let totalUploadSize = 0;
+let totalUploadedBytes = 0;
 
 // ── Download State (Receiving) ─────────────────────────────
 let fileWriter = null;       // FileSystemWritableFileStream or Array (fallback)
@@ -76,7 +78,9 @@ const elRoomSetup = document.getElementById('room-setup-section');
 const elTransferSection = document.getElementById('transfer-section');
 const elCurrentRoomId = document.getElementById('current-room-id');
 const elPeerRoleText = document.getElementById('peer-role-text');
-const elFileInput = document.getElementById('file-input');
+const elBtnSelectFile = document.getElementById('btn-select-file');
+const elBtnSelectFolder = document.getElementById('btn-select-folder');
+const elSelectedFilesList = document.getElementById('selected-files-list');
 const elBtnStartSend = document.getElementById('btn-start-send');
 const elBtnDisconnect = document.getElementById('btn-disconnect');
 
@@ -113,13 +117,10 @@ const elBtnCancelRecv = document.getElementById('btn-cancel-recv');
 const elFallbackDownloadContainer = document.getElementById('fallback-download-container');
 const elBtnFallbackDownload = document.getElementById('btn-fallback-download');
 
-// Settings UI
-const elChunkSizeSelect = document.getElementById('chunk-size-select');
-const elTxChunkSize = document.getElementById('tx-chunk-size');
-const elProtocolAnalysis = document.getElementById('protocol-analysis');
-const elConsoleLogs = document.getElementById('console-logs');
-const speedLimitInput = document.getElementById('speedLimit');
-const speedLimitVal = document.getElementById('speed-limit-val');
+// Chat UI
+const elChatInput = document.getElementById('chat-input');
+const elBtnSendChat = document.getElementById('btn-send-chat');
+const elChatMessages = document.getElementById('chat-messages');
 
 // ============================================================
 // STUN Configuration
@@ -313,10 +314,16 @@ async function initiateWebRTC() {
 
     if (state === 'connected') {
       updateConnectionUI('running', 'Connected P2P');
-      elPeerRoleText.textContent = 'Peer Connected. Ready to transfer.';
-      elFileInput.disabled = false;
-      speedLimitInput.disabled = false;
-      if (elChunkSizeSelect) elChunkSizeSelect.disabled = false;
+      elPeerRoleText.textContent = 'Peer Connected. Ready to transfer and chat.';
+      if (elBtnSelectFile) elBtnSelectFile.disabled = false;
+      if (elBtnSelectFolder) elBtnSelectFolder.disabled = false;
+      
+      // Enable chat
+      if (elChatInput) elChatInput.disabled = false;
+      if (elBtnSendChat) elBtnSendChat.disabled = false;
+      if (elChatMessages) elChatMessages.innerHTML = '';
+      appendChatMessage('System', 'Secure E2E connection established. You can now chat.', 'system');
+
     } else if (state === 'disconnected' || state === 'failed') {
       updateConnectionUI('error', 'Disconnected');
       cleanupWebRTC();
@@ -357,9 +364,12 @@ function cleanupWebRTC() {
   if (txChannel) { try { txChannel.close(); } catch (e) {} txChannel = null; }
   if (rxChannel) { try { rxChannel.close(); } catch (e) {} rxChannel = null; }
   if (peerConnection) { try { peerConnection.close(); } catch (e) {} peerConnection = null; }
-  elFileInput.disabled = true;
-  speedLimitInput.disabled = true;
-  if (elChunkSizeSelect) elChunkSizeSelect.disabled = true;
+  if (elBtnSelectFile) elBtnSelectFile.disabled = true;
+  if (elBtnSelectFolder) elBtnSelectFolder.disabled = true;
+  
+  // Disable chat
+  if (elChatInput) elChatInput.disabled = true;
+  if (elBtnSendChat) elBtnSendChat.disabled = true;
 
   if (window.E2E) {
     E2E.reset();
@@ -400,8 +410,8 @@ function setupTxChannel(channel) {
 
   channel.onopen = () => {
     log('Transmit data channel opened.');
-    elFileInput.disabled = false;
-    speedLimitInput.disabled = false;
+    if (elBtnSelectFile) elBtnSelectFile.disabled = false;
+    if (elBtnSelectFolder) elBtnSelectFolder.disabled = false;
   };
 
   channel.onclose = () => log('Transmit data channel closed.');
@@ -419,6 +429,8 @@ function setupTxChannel(channel) {
       stopTxStallTimer();
       resetUploadUI();
       elTxStatusText.textContent = 'Cancelled by receiver';
+    } else if (msg.type === 'chat') {
+      appendChatMessage('Peer', msg.text, 'received');
     }
   };
 }
@@ -426,6 +438,10 @@ function setupTxChannel(channel) {
 // ============================================================
 // Receive Channel Setup
 // ============================================================
+let incomingFiles = [];
+let fileHandleMap = new Map();
+let totalReceivedBytes = 0;
+
 function setupRxChannel(channel) {
   channel.binaryType = 'arraybuffer';
 
@@ -437,13 +453,13 @@ function setupRxChannel(channel) {
       const msg = JSON.parse(event.data);
 
       if (msg.type === 'meta') {
-        // Incoming file offer
-        log(`Incoming file offer: ${msg.name} (${formatBytes(msg.size)})`);
-        downloadFileName = msg.name;
-        downloadFileSize = msg.size;
+        incomingFiles = msg.files;
+        downloadFileSize = msg.totalSize;
 
-        elIncomingFilename.textContent = msg.name;
-        elIncomingFilesize.textContent = formatBytes(msg.size);
+        log(`Incoming offer: ${incomingFiles.length} files (${formatBytes(downloadFileSize)})`);
+
+        elIncomingFilename.textContent = incomingFiles.length > 1 ? `${incomingFiles.length} files / folders` : incomingFiles[0].name;
+        elIncomingFilesize.textContent = formatBytes(downloadFileSize);
 
         elDownloadStatsPanel.classList.add('hidden');
         if (elFallbackDownloadContainer) elFallbackDownloadContainer.classList.add('hidden');
@@ -452,30 +468,34 @@ function setupRxChannel(channel) {
         elNoIncomingPrompt.classList.add('hidden');
         elIncomingFileAlert.classList.remove('hidden');
 
-        // Accept button — prompts save location then signals sender to start
         elBtnAcceptFile.onclick = async () => {
           elIncomingFileAlert.classList.add('hidden');
           elDownloadStatsPanel.classList.remove('hidden');
           if (elFallbackDownloadContainer) elFallbackDownloadContainer.classList.add('hidden');
-          elRxStatusText.textContent = 'Saving...';
-          elRxIntegrityStatus.textContent = 'Downloading...';
+          elRxStatusText.textContent = 'Preparing folders...';
+          elRxIntegrityStatus.textContent = '';
 
           try {
-            if ('showSaveFilePicker' in window) {
-              try {
-                const handle = await window.showSaveFilePicker({ suggestedName: downloadFileName });
-                fileWriter = await handle.createWritable();
-                log('File stream opened via File System Access API (direct-to-disk).');
-              } catch (e) {
-                log(`Save picker cancelled/failed: ${e.message}. Using in-memory buffer.`);
-                fileWriter = [];
+            if ('showDirectoryPicker' in window && incomingFiles.length > 1) {
+              const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+              for (let i = 0; i < incomingFiles.length; i++) {
+                const parts = incomingFiles[i].name.split('/');
+                let currDir = dirHandle;
+                for (let j = 0; j < parts.length - 1; j++) {
+                  currDir = await currDir.getDirectoryHandle(parts[j], { create: true });
+                }
+                const fileHandle = await currDir.getFileHandle(parts[parts.length - 1], { create: true });
+                fileHandleMap.set(i, fileHandle);
               }
+              log('Folders and file handles created successfully.');
+            } else if ('showSaveFilePicker' in window && incomingFiles.length === 1) {
+              const fileHandle = await window.showSaveFilePicker({ suggestedName: incomingFiles[0].name });
+              fileHandleMap.set(0, fileHandle);
             } else {
-              log('File System Access API not supported. Using in-memory buffer.');
-              fileWriter = [];
+              log('File System Access API not fully supported or user denied. Using memory fallback (browser may crash on huge files).');
             }
 
-            downloadReceivedSize = 0;
+            totalReceivedBytes = 0;
             isDownloading = true;
             downloadStartTime = performance.now();
             downloadLastTime = downloadStartTime;
@@ -484,10 +504,10 @@ function setupRxChannel(channel) {
             rxQueue = [];
             isProcessingRx = false;
 
-            // Signal sender we are ready
             if (rxChannel && rxChannel.readyState === 'open') {
               rxChannel.send(JSON.stringify({ type: 'ready' }));
             }
+            elRxStatusText.textContent = 'Receiving...';
 
             startStatsInterval();
             startRxStallTimer();
@@ -500,203 +520,189 @@ function setupRxChannel(channel) {
           }
         };
 
-      } else if (msg.type === 'done') {
-        log('All chunks received. Finalizing file...');
-        isDownloading = false;
-        stopRxStallTimer();
-
-        if (rxQueue.length === 0 && !isProcessingRx && writeQueue.length === 0 && !isWriting && fileWriter) {
-          await closeFileWriter();
-        }
       } else if (msg.type === 'cancel') {
         log('Sender cancelled the transfer.');
         stopRxStallTimer();
         resetDownloadUI();
         elRxStatusText.textContent = 'Cancelled by sender';
+      } else if (msg.type === 'chat') {
+        appendChatMessage('Peer', msg.text, 'received');
+      } else if (['file_start', 'file_done', 'done'].includes(msg.type)) {
+        rxQueue.push({ type: 'cmd', msg });
+        processRxQueue();
       }
-
     } else {
-      // Binary chunk received
-      rxQueue.push(event.data);
+      // Binary chunk
+      rxQueue.push({ type: 'data', chunk: event.data });
       processRxQueue();
     }
   };
 }
 
 // ============================================================
-// Receiver Queue Processor — Decrypts and processes chunks sequentially
+// Receiver Queue Processor
 // ============================================================
 async function processRxQueue() {
   if (isProcessingRx || rxQueue.length === 0) return;
   isProcessingRx = true;
 
   while (rxQueue.length > 0) {
-    const encChunk = rxQueue.shift();
-    let decChunk;
+    const item = rxQueue.shift();
 
-    if (window.E2E && E2E.ready()) {
-      try {
-        if (downloadReceivedSize === 0) {
-          log('🔒 E2E: Decrypting incoming chunks using AES-256-GCM...');
+    if (item.type === 'cmd') {
+      const msg = item.msg;
+      if (msg.type === 'file_start') {
+        log(`Starting to receive file ${msg.index}`);
+        if (fileHandleMap.has(msg.index)) {
+          fileWriter = await fileHandleMap.get(msg.index).createWritable();
+        } else {
+          fileWriter = []; // fallback memory array
         }
-        decChunk = await E2E.decryptChunk(encChunk);
-      } catch (err) {
-        log(`❌ Decryption error: ${err.message}`);
+      } else if (msg.type === 'file_done') {
+        log(`Finished receiving file ${msg.index}`);
+        if (fileWriter && typeof fileWriter.write === 'function') {
+          writeQueue.push({ type: 'CMD', cmd: 'CLOSE_FILE' });
+          processWriteQueue();
+        } else if (Array.isArray(fileWriter)) {
+          // Memory fallback zip or download logic could go here if needed.
+          // For now, if it's 1 file, we download it at the very end ('done')
+        }
+      } else if (msg.type === 'done') {
+        log('All files received successfully.');
+        isDownloading = false;
+        stopRxStallTimer();
+        elRxStatusText.textContent = 'Saved ✓';
+        if (Array.isArray(fileWriter) && incomingFiles.length === 1) {
+           triggerFallbackDownload(incomingFiles[0].name, fileWriter);
+        }
+      }
+    } else if (item.type === 'data') {
+      let decChunk;
+      if (window.E2E && E2E.ready()) {
+        try {
+          decChunk = await E2E.decryptChunk(item.chunk);
+        } catch (err) {
+          log(`❌ Decryption error: ${err.message}`);
+          cancelRecv();
+          isProcessingRx = false;
+          return;
+        }
+      } else {
         cancelRecv();
         isProcessingRx = false;
         return;
       }
-    } else {
-      log('⚠️ E2E decryption is not ready. Aborting transfer.');
-      cancelRecv();
-      isProcessingRx = false;
-      return;
+
+      totalReceivedBytes += decChunk.byteLength;
+      
+      if (fileWriter && typeof fileWriter.write === 'function') {
+        writeQueue.push(decChunk);
+        processWriteQueue();
+      } else if (Array.isArray(fileWriter)) {
+        fileWriter.push(decChunk);
+      }
+
+      resetRxStallTimer();
+      const pct = ((totalReceivedBytes / downloadFileSize) * 100).toFixed(1);
+      elRxProgressBar.style.width = `${pct}%`;
+      elRxProgressPercent.textContent = `${pct}%`;
     }
-
-    downloadReceivedSize += decChunk.byteLength;
-    writeChunk(decChunk);
-
-    // Reset stall timer — we got data
-    resetRxStallTimer();
-
-    // Fast progress bar update
-    const pct = ((downloadReceivedSize / downloadFileSize) * 100).toFixed(1);
-    elRxProgressBar.style.width = `${pct}%`;
-    elRxProgressPercent.textContent = `${pct}%`;
   }
 
   isProcessingRx = false;
-
-  // If download signalled 'done' and queues are now drained, close the file
-  if (!isDownloading && rxQueue.length === 0 && !isProcessingRx && writeQueue.length === 0 && !isWriting && fileWriter) {
-    await closeFileWriter();
-  }
 }
 
 // ============================================================
-// Write Queue — Serializes all disk writes
+// Write Queue
 // ============================================================
-async function writeChunk(chunk) {
-  if (!fileWriter) return;
-  if (typeof fileWriter.write === 'function') {
-    // FileSystemWritableFileStream: queue for serialized writes
-    writeQueue.push(chunk);
-    processWriteQueue();
-  } else if (Array.isArray(fileWriter)) {
-    // In-memory fallback: just push
-    fileWriter.push(chunk);
-  }
-}
-
 async function processWriteQueue() {
   if (isWriting || writeQueue.length === 0) return;
   isWriting = true;
 
   while (writeQueue.length > 0) {
-    const chunk = writeQueue.shift();
+    const item = writeQueue.shift();
     try {
-      if (fileWriter && typeof fileWriter.write === 'function') {
-        await fileWriter.write(chunk);
+      if (item.type === 'CMD' && item.cmd === 'CLOSE_FILE') {
+        if (fileWriter) {
+          await fileWriter.close();
+          fileWriter = null;
+        }
+      } else if (fileWriter && typeof fileWriter.write === 'function') {
+        await fileWriter.write(item);
       }
     } catch (e) {
       log(`Disk write error: ${e.message}`);
       isWriting = false;
-      // Notify sender and abort
       if (rxChannel && rxChannel.readyState === 'open') {
         rxChannel.send(JSON.stringify({ type: 'cancel' }));
       }
-      await resetDownloadUI();
+      resetDownloadUI();
       return;
     }
   }
 
   isWriting = false;
-
-  // If download signalled 'done' and queues are now drained, close the file
-  if (!isDownloading && rxQueue.length === 0 && !isProcessingRx && writeQueue.length === 0 && !isWriting && fileWriter) {
-    await closeFileWriter();
-  }
 }
 
-async function closeFileWriter() {
-  const writer = fileWriter;
-  fileWriter = null; // Clear reference before async work to prevent re-entry
-
-  if (writer && typeof writer.close === 'function') {
-    log('Closing file stream and saving to disk...');
-    try {
-      await writer.close();
-      log('✅ File saved successfully to disk.');
-      elRxStatusText.textContent = 'Saved ✓';
-      elRxIntegrityStatus.textContent = 'File saved successfully.';
-    } catch (e) {
-      log(`Error closing file: ${e.message}`);
-      elRxStatusText.textContent = 'Error';
-      elRxIntegrityStatus.textContent = `Error saving file: ${e.message}`;
+function triggerFallbackDownload(filename, chunksArray) {
+  log('Assembling in-memory download...');
+  try {
+    downloadedBlob = new Blob(chunksArray);
+    elRxStatusText.textContent = 'Ready to Save';
+    elRxIntegrityStatus.textContent = 'Transfer complete. Click below to save.';
+    if (elFallbackDownloadContainer) elFallbackDownloadContainer.classList.remove('hidden');
+    if (elBtnFallbackDownload) {
+      elBtnFallbackDownload.onclick = () => {
+        const url = URL.createObjectURL(downloadedBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        if (elFallbackDownloadContainer) elFallbackDownloadContainer.classList.add('hidden');
+      };
     }
-  } else if (Array.isArray(writer)) {
-    log('Assembling in-memory download...');
-    try {
-      downloadedBlob = new Blob(writer);
-      elRxStatusText.textContent = 'Ready to Save';
-      elRxIntegrityStatus.textContent = 'Transfer complete. Click below to save.';
-      if (elFallbackDownloadContainer) elFallbackDownloadContainer.classList.remove('hidden');
-      if (elBtnFallbackDownload) {
-        elBtnFallbackDownload.onclick = () => {
-          try {
-            const url = URL.createObjectURL(downloadedBlob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = downloadFileName;
-            a.click();
-            URL.revokeObjectURL(url);
-            log('File downloaded via user gesture.');
-          } catch (err) {
-            log(`Error downloading file: ${err.message}`);
-          }
-          if (elFallbackDownloadContainer) elFallbackDownloadContainer.classList.add('hidden');
-          downloadedBlob = null;
-        };
-      }
-    } catch (e) {
-      log(`Error assembling in-memory file: ${e.message}`);
-      elRxStatusText.textContent = 'Error';
-      elRxIntegrityStatus.textContent = 'Failed to assemble file.';
-    }
+  } catch (e) {
+    log(`Error assembling in-memory file: ${e.message}`);
   }
 }
 
 // ============================================================
 // Sending: Offer, Stream, Pause/Resume, Cancel
 // ============================================================
-function startSendingFile() {
+function startSendingFiles() {
   if (window.E2E && !E2E.ready()) {
     alert('End-to-end secure channel is still establishing. Please wait a moment.');
     return;
   }
-  log(`Offering to send: ${selectedFile.name} (${formatBytes(selectedFile.size)})`);
+  
+  log(`Offering to send ${filesToSend.length} file(s) (Total: ${formatBytes(totalUploadSize)})`);
+  
+  const metaFiles = filesToSend.map(f => ({ name: f.relativePath, size: f.file.size }));
+  
   txChannel.send(JSON.stringify({
     type: 'meta',
-    name: selectedFile.name,
-    size: selectedFile.size
+    files: metaFiles,
+    totalSize: totalUploadSize
   }));
+  
   elUploadStatsPanel.classList.remove('hidden');
   elTxStatusText.textContent = 'Waiting for peer approval...';
-  // Show pause/cancel controls, hide resume
   elBtnPauseSend.style.display = '';
   elBtnResumeSend.style.display = 'none';
 }
 
 async function startStreaming() {
+  currentFileIndex = 0;
   uploadOffset = 0;
+  totalUploadedBytes = 0;
   isUploading = true;
   isPaused = false;
   uploadStartTime = performance.now();
   uploadLastTime = uploadStartTime;
   uploadLastBytes = 0;
   txLastProgressBytes = 0;
-
-  if (elTxChunkSize) elTxChunkSize.textContent = `${(chunkSize / 1024).toFixed(0)} KB`;
+  chunkSize = 16384; // Reset chunk size on start
 
   elTxStatusText.textContent = 'Transmitting...';
   elBtnPauseSend.style.display = '';
@@ -712,66 +718,82 @@ async function sendNextChunks() {
   if (!isUploading || isPaused) return;
 
   try {
-    while (uploadOffset < selectedFile.size) {
-      if (!isUploading || isPaused) return;
-
-      // Backpressure check: if buffer is full, wait a bit and check again
-      if (txChannel.bufferedAmount > MAX_BUFFERED_AMOUNT) {
-        await new Promise(resolve => setTimeout(resolve, 50));
-        continue;
+    while (currentFileIndex < filesToSend.length) {
+      const currentFileObj = filesToSend[currentFileIndex];
+      const selectedFile = currentFileObj.file;
+      
+      // If just starting this file, send file_start
+      if (uploadOffset === 0) {
+        log(`Starting file ${currentFileIndex + 1}/${filesToSend.length}: ${currentFileObj.relativePath}`);
+        txChannel.send(JSON.stringify({ type: 'file_start', index: currentFileIndex }));
+        // Wait a tiny bit for the receiver to process the start message and open the writer
+        await new Promise(r => setTimeout(r, 50));
       }
 
-      // Speed throttling
-      if (speedLimit > 0) {
-        const now = performance.now();
-        const elapsed = now - lastChunkTime;
-        const minTime = (chunkSize / speedLimit) * 1000;
-        if (elapsed < minTime) {
-          await new Promise(resolve => setTimeout(resolve, minTime - elapsed));
+      while (uploadOffset < selectedFile.size) {
+        if (!isUploading || isPaused) return;
+
+        // Auto-Tuning Congestion Control (AIMD Algorithm)
+        const buffered = txChannel.bufferedAmount;
+        
+        if (buffered > MAX_BUFFERED_AMOUNT) {
+          // Buffer full: Multiplicative decrease & wait
+          chunkSize = Math.max(4096, Math.floor(chunkSize * 0.75));
+          await new Promise(resolve => setTimeout(resolve, 50));
           continue;
+        } else if (buffered > MAX_BUFFERED_AMOUNT / 2 || lastRtt > 150) {
+          // Moderate congestion: slight decrease
+          chunkSize = Math.max(4096, Math.floor(chunkSize * 0.9));
+        } else if (buffered < MAX_BUFFERED_AMOUNT / 10 && lastRtt < 50) {
+          // Network clear: Additive increase
+          chunkSize = Math.min(262144, chunkSize + 4096);
         }
+
+        // Read current chunk directly from disk
+        const chunk = selectedFile.slice(uploadOffset, uploadOffset + chunkSize);
+        const buffer = await chunk.arrayBuffer();
+
+        let encryptedBuffer = buffer;
+        if (window.E2E && E2E.ready()) {
+          encryptedBuffer = await E2E.encryptChunk(buffer);
+        } else {
+          log('⚠️ E2E encryption is not ready. Aborting transfer.');
+          cancelSend();
+          return;
+        }
+
+        txChannel.send(encryptedBuffer);
+        uploadOffset += buffer.byteLength;
+        totalUploadedBytes += buffer.byteLength;
+
+        // Update progress UI using totalUploadedBytes
+        const pct = ((totalUploadedBytes / totalUploadSize) * 100).toFixed(1);
+        elTxProgressBar.style.width = `${pct}%`;
+        elTxProgressPercent.textContent = `${pct}%`;
+
+        // Reset stall timer — we just sent data
+        resetTxStallTimer();
       }
 
-      // Read current chunk directly from disk
-      const chunk = selectedFile.slice(uploadOffset, uploadOffset + chunkSize);
-      const buffer = await chunk.arrayBuffer();
-
-      let encryptedBuffer = buffer;
-      if (window.E2E && E2E.ready()) {
-        if (uploadOffset === 0) {
-          log('🔒 E2E: Encrypting outgoing chunks using AES-256-GCM...');
-        }
-        encryptedBuffer = await E2E.encryptChunk(buffer);
-      } else {
-        log('⚠️ E2E encryption is not ready. Aborting transfer.');
-        cancelSend();
-        return;
-      }
-
-      txChannel.send(encryptedBuffer);
-      uploadOffset += buffer.byteLength;
-      lastChunkTime = performance.now();
-
-      // Update progress UI
-      const pct = ((uploadOffset / selectedFile.size) * 100).toFixed(1);
-      elTxProgressBar.style.width = `${pct}%`;
-      elTxProgressPercent.textContent = `${pct}%`;
-      if (elTxChunkSize) elTxChunkSize.textContent = `${(chunkSize / 1024).toFixed(0)} KB`;
-
-      // Reset stall timer — we just sent data
-      resetTxStallTimer();
+      // File complete
+      txChannel.send(JSON.stringify({ type: 'file_done', index: currentFileIndex }));
+      log(`Finished sending ${currentFileObj.relativePath}`);
+      
+      currentFileIndex++;
+      uploadOffset = 0;
+      await new Promise(r => setTimeout(r, 50)); // Tiny yield between files
     }
 
-    if (uploadOffset >= selectedFile.size) {
-      txChannel.send(JSON.stringify({ type: 'done' }));
-      log('Upload complete. Sent "done" signal to receiver.');
-      elTxStatusText.textContent = 'Done ✓';
-      isUploading = false;
-      isPaused = false;
-      stopTxStallTimer();
-      elBtnPauseSend.style.display = 'none';
-      elBtnResumeSend.style.display = 'none';
-    }
+    // All files complete
+    txChannel.send(JSON.stringify({ type: 'done' }));
+    log('Upload complete. Sent "done" signal to receiver.');
+    elTxStatusText.textContent = 'Done ✓';
+    isUploading = false;
+    isPaused = false;
+    stopTxStallTimer();
+    elBtnPauseSend.style.display = 'none';
+    elBtnResumeSend.style.display = 'none';
+    
   } catch (err) {
     log(`❌ Transmission error: ${err.message}`);
     cancelSend();
@@ -784,7 +806,7 @@ function pauseTransfer() {
   elTxStatusText.textContent = 'Paused';
   elBtnPauseSend.style.display = 'none';
   elBtnResumeSend.style.display = '';
-  stopTxStallTimer(); // Don't false-alarm during intentional pause
+  stopTxStallTimer();
   log('Transfer paused.');
 }
 
@@ -794,7 +816,7 @@ function resumeTransfer() {
   elTxStatusText.textContent = 'Transmitting...';
   elBtnPauseSend.style.display = '';
   elBtnResumeSend.style.display = 'none';
-  txLastProgressBytes = uploadOffset; // Reset stall baseline
+  txLastProgressBytes = totalUploadedBytes;
   startTxStallTimer();
   log('Transfer resumed.');
   sendNextChunks();
@@ -806,7 +828,6 @@ function cancelSend() {
   isUploading = false;
   isPaused = false;
   stopTxStallTimer();
-  // Tell receiver we cancelled
   if (txChannel && txChannel.readyState === 'open') {
     txChannel.send(JSON.stringify({ type: 'cancel' }));
   }
@@ -818,7 +839,6 @@ function cancelRecv() {
   log('Transfer cancelled by receiver.');
   isDownloading = false;
   stopRxStallTimer();
-  // Tell sender we cancelled
   if (rxChannel && rxChannel.readyState === 'open') {
     rxChannel.send(JSON.stringify({ type: 'cancel' }));
   }
@@ -1162,6 +1182,40 @@ function pushChartData(txMbps, rxMbps, rtt) {
 }
 
 // ============================================================
+// Chat Logic
+// ============================================================
+function appendChatMessage(sender, text, type) {
+  if (!elChatMessages) return;
+  const msgDiv = document.createElement('div');
+  msgDiv.className = `chat-msg ${type}`;
+  
+  const textSpan = document.createElement('span');
+  textSpan.textContent = text;
+  msgDiv.appendChild(textSpan);
+  
+  const timeSpan = document.createElement('span');
+  timeSpan.className = 'time';
+  timeSpan.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  msgDiv.appendChild(timeSpan);
+  
+  elChatMessages.appendChild(msgDiv);
+  elChatMessages.scrollTop = elChatMessages.scrollHeight;
+}
+
+function sendChatMessage() {
+  const text = elChatInput.value.trim();
+  if (!text) return;
+  
+  if (txChannel && txChannel.readyState === 'open') {
+    txChannel.send(JSON.stringify({ type: 'chat', text }));
+    appendChatMessage('You', text, 'sent');
+    elChatInput.value = '';
+  } else {
+    log('Cannot send message: no active connection.');
+  }
+}
+
+// ============================================================
 // Event Listeners
 // ============================================================
 document.getElementById('btn-create-room').addEventListener('click', () => {
@@ -1183,44 +1237,95 @@ elBtnDisconnect.addEventListener('click', () => {
   window.location.href = window.location.origin;
 });
 
-elFileInput.addEventListener('change', (e) => {
-  if (e.target.files.length > 0) {
-    selectedFile = e.target.files[0];
-    elBtnStartSend.removeAttribute('disabled');
-    log(`Selected file: ${selectedFile.name} (${formatBytes(selectedFile.size)})`);
-  } else {
-    selectedFile = null;
-    elBtnStartSend.setAttribute('disabled', 'true');
+async function scanDirectory(dirHandle, path = '') {
+  let files = [];
+  for await (const entry of dirHandle.values()) {
+    if (entry.kind === 'file') {
+      const file = await entry.getFile();
+      files.push({ handle: entry, file: file, relativePath: `${path}${file.name}` });
+    } else if (entry.kind === 'directory') {
+      const subFiles = await scanDirectory(entry, `${path}${entry.name}/`);
+      files.push(...subFiles);
+    }
   }
-});
+  return files;
+}
 
-elBtnStartSend.addEventListener('click', () => {
-  if (selectedFile && txChannel && txChannel.readyState === 'open') {
-    startSendingFile();
+function updateSelectedFilesUI() {
+  if (filesToSend.length === 0) {
+    elSelectedFilesList.innerHTML = 'No content selected.';
+    elBtnStartSend.setAttribute('disabled', 'true');
+    return;
   }
-});
+  
+  totalUploadSize = filesToSend.reduce((acc, f) => acc + f.file.size, 0);
+  
+  if (filesToSend.length === 1) {
+    elSelectedFilesList.innerHTML = `<strong>${filesToSend[0].relativePath}</strong> (${formatBytes(totalUploadSize)})`;
+  } else {
+    elSelectedFilesList.innerHTML = `<strong>${filesToSend.length} files</strong> selected (${formatBytes(totalUploadSize)})<br>` +
+      filesToSend.slice(0, 3).map(f => `<small>${f.relativePath}</small>`).join('<br>') +
+      (filesToSend.length > 3 ? `<br><small>...and ${filesToSend.length - 3} more</small>` : '');
+  }
+  elBtnStartSend.removeAttribute('disabled');
+}
+
+if (elBtnSelectFile) {
+  elBtnSelectFile.addEventListener('click', async () => {
+    try {
+      const handles = await window.showOpenFilePicker({ multiple: true });
+      filesToSend = [];
+      for (const handle of handles) {
+        const file = await handle.getFile();
+        filesToSend.push({ handle, file, relativePath: file.name });
+      }
+      log(`Selected ${filesToSend.length} file(s).`);
+      updateSelectedFilesUI();
+    } catch (e) {
+      log('File selection cancelled or failed.');
+    }
+  });
+}
+
+if (elBtnSelectFolder) {
+  elBtnSelectFolder.addEventListener('click', async () => {
+    try {
+      const dirHandle = await window.showDirectoryPicker();
+      log('Scanning folder, please wait...');
+      elSelectedFilesList.innerHTML = 'Scanning folder...';
+      filesToSend = await scanDirectory(dirHandle, `${dirHandle.name}/`);
+      log(`Scanned folder. Found ${filesToSend.length} file(s).`);
+      updateSelectedFilesUI();
+    } catch (e) {
+      log('Folder selection cancelled or failed.');
+      updateSelectedFilesUI();
+    }
+  });
+}
+
+if (elBtnStartSend) {
+  elBtnStartSend.addEventListener('click', () => {
+    if (filesToSend.length > 0 && txChannel && txChannel.readyState === 'open') {
+      startSendingFiles();
+    }
+  });
+}
 
 if (elBtnPauseSend) elBtnPauseSend.addEventListener('click', pauseTransfer);
 if (elBtnResumeSend) elBtnResumeSend.addEventListener('click', resumeTransfer);
 if (elBtnCancelSend) elBtnCancelSend.addEventListener('click', cancelSend);
 if (elBtnCancelRecv) elBtnCancelRecv.addEventListener('click', cancelRecv);
 
-speedLimitInput.addEventListener('input', (e) => {
-  const val = parseInt(e.target.value);
-  if (val === 0) {
-    speedLimitVal.textContent = 'Unlimited';
-    speedLimit = 0;
-  } else {
-    speedLimitVal.textContent = `${val} MB/s`;
-    speedLimit = val * 1024 * 1024;
-  }
-});
+if (elBtnSendChat) {
+  elBtnSendChat.addEventListener('click', sendChatMessage);
+}
 
-if (elChunkSizeSelect) {
-  elChunkSizeSelect.addEventListener('change', (e) => {
-    chunkSize = parseInt(e.target.value);
-    log(`Chunk size changed to: ${(chunkSize / 1024).toFixed(0)} KB`);
-    updateProtocolAnalysis();
+if (elChatInput) {
+  elChatInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendChatMessage();
+    }
   });
 }
 
