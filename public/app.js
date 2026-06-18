@@ -1044,7 +1044,7 @@ function resetUI() {
 // Protocol Analysis Tip
 // ============================================================
 function updateProtocolAnalysis() {
-  if (!elProtocolAnalysis) return;
+  if (typeof elProtocolAnalysis === 'undefined' || !elProtocolAnalysis) return;
   let tip = '<strong>Optimal Config Tip:</strong> ';
   if (lastRtt > 150) {
     tip += `High latency (${lastRtt.toFixed(0)} ms). Use 64–256 KB chunks for better long-distance throughput.`;
@@ -1060,13 +1060,18 @@ function updateProtocolAnalysis() {
 // Utility
 // ============================================================
 function log(msg) {
-  const time = new Date().toLocaleTimeString();
-  elConsoleLogs.textContent += `\n[${time}] ${msg}`;
-  elConsoleLogs.scrollTop = elConsoleLogs.scrollHeight;
+  console.log(msg);
+  if (typeof elConsoleLogs !== 'undefined' && elConsoleLogs) {
+    const time = new Date().toLocaleTimeString();
+    elConsoleLogs.textContent += `\n[${time}] ${msg}`;
+    elConsoleLogs.scrollTop = elConsoleLogs.scrollHeight;
+  }
 }
 
 function clearLogs() {
-  elConsoleLogs.textContent = 'Logs cleared.';
+  if (typeof elConsoleLogs !== 'undefined' && elConsoleLogs) {
+    elConsoleLogs.textContent = 'Logs cleared.';
+  }
 }
 
 function formatBytes(bytes, decimals = 2) {
